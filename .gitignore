@@ -9,6 +9,7 @@ backend/dist/
 
 # Expo / React Native
 .expo/
+.expo-tmp-bundle/
 dist/
 web-build/
 google-service-account.json
