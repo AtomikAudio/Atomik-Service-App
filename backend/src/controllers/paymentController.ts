@@ -203,6 +203,26 @@ export const verifyPayment = async (
     });
 
     if (!invoice) {
+      // The Razorpay webhook may have settled this payment first (race condition).
+      // Treat an already-paid invoice for the same order/payment as success so the
+      // app does not show a false "verification failed" after a successful payment.
+      const alreadyPaid = await Invoice.findOne({
+        _id: String(invoiceId),
+        clientId: req.user!.id,
+        status: 'paid',
+        $or: [
+          { razorpayOrderId: orderId },
+          { 'paymentHistory.razorpayPaymentId': paymentId },
+        ],
+      });
+
+      if (alreadyPaid) {
+        res
+          .status(200)
+          .json({ success: true, message: 'Payment verified', invoice: alreadyPaid });
+        return;
+      }
+
       res.status(400).json({
         success: false,
         message: 'Invoice not found, already paid, or order mismatch',
