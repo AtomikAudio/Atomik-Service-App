@@ -78,7 +78,7 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
               <Text style={styles.cardDesc}>{group.description}</Text>
               {group.hasSubmenu && (
                 <Text style={styles.cardMeta}>
-                  Amplifier · Speaker · DSP · Others
+                  Tuning · Amplifier Rack · Damage Check
                 </Text>
               )}
             </View>
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: COLORS.redMuted,
     borderWidth: 1,
-    borderColor: 'rgba(237, 29, 36, 0.25)',
+    borderColor: 'rgba(142, 48, 47, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },

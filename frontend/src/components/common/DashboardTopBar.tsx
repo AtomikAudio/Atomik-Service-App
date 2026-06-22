@@ -7,7 +7,7 @@ import { ScreenTopBar } from './ScreenTopBar';
 export const DASHBOARD_LOGO_SIZE = 'lg' as const;
 export const DASHBOARD_BELL_SIZE = 28;
 
-const LOGO_HEIGHT = 46;
+const LOGO_HEIGHT = 63;
 const LOGO_WIDTH = Math.round(LOGO_HEIGHT * 4.2);
 const LOGO_SOURCE = require('../../../assets/atomik-logo-hero.png');
 

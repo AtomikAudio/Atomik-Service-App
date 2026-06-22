@@ -33,10 +33,18 @@ if (Test-Path $envFile) {
   $updated = foreach ($line in $lines) {
     if ($line -match '^EXPO_PUBLIC_API_URL=') {
       $found = $true
-      if ($line -ne $newApiLine) {
-        Write-Host (' Synced .env API URL -> ' + $newApiLine) -ForegroundColor Green
+      $current = ($line -replace '^EXPO_PUBLIC_API_URL=', '').Trim()
+      if ($current -match '^https://') {
+        # Remote API (e.g. Render) set intentionally — keep it so the device
+        # can hit production without depending on the PC backend / LAN firewall.
+        Write-Host (' Keeping remote API URL -> ' + $current) -ForegroundColor Yellow
+        $line
+      } else {
+        if ($line -ne $newApiLine) {
+          Write-Host (' Synced .env API URL -> ' + $newApiLine) -ForegroundColor Green
+        }
+        $newApiLine
       }
-      $newApiLine
     } else {
       $line
     }

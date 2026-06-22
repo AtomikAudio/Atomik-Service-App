@@ -2,9 +2,7 @@ import mongoose from 'mongoose';
 import { Invoice, IInvoice } from '../models/Invoice';
 import { Booking } from '../models/Booking';
 import { Notification } from '../models/Notification';
-import { User } from '../models/User';
-import { notifyByRoles } from '../utils/notifyUsers';
-import { sendPaymentSuccessEmail } from '../utils/sendEmails';
+import { notifyByRoles, notifyUsers } from '../utils/notifyUsers';
 import { toObjectId } from '../utils/mongoQuery';
 
 export interface SettlePaymentParams {
@@ -54,6 +52,7 @@ export async function settleInvoicePayment(
       : (existing.spareParts ?? 0) > 0
         ? 'full'
         : 'base_service';
+  const isExtraPartsPayment = paymentType === 'extra_parts';
 
   const invoice = await Invoice.findByIdAndUpdate(
     existing._id,
@@ -87,8 +86,13 @@ export async function settleInvoicePayment(
       ? new mongoose.Types.ObjectId(params.updatedByUserId)
       : invoice.clientId;
 
+  const booking = invoice.bookingId
+    ? await Booking.findById(invoice.bookingId).select(
+        'status technicianId assignedTechnicianId bookingId'
+      )
+    : null;
+
   if (invoice.bookingId) {
-    const booking = await Booking.findById(invoice.bookingId).select('status');
     const activeStatuses = [
       'technician_assigned',
       'en_route',
@@ -96,7 +100,6 @@ export async function settleInvoicePayment(
       'in_progress',
       'completed',
     ];
-    const isExtraPartsPayment = paymentType === 'extra_parts';
     const historyEntry = {
       status: 'confirmed',
       timestamp: new Date(),
@@ -128,19 +131,38 @@ export async function settleInvoicePayment(
     category: 'payment',
   });
 
-  await notifyByRoles(['admin'], {
-    title: 'Payment received',
-    body: `Invoice ${invoice.invoiceNumber} paid — ₹${invoice.totalAmount.toLocaleString('en-IN')}. Booking ready to assign.`,
-    type: 'success',
-    category: 'payment',
-    data: { invoiceId: invoice._id, bookingId: invoice.bookingId },
-  });
+  const bookingRef = booking?.bookingId
+    ? `booking ${booking.bookingId}`
+    : `invoice ${invoice.invoiceNumber}`;
+  const notificationData = { invoiceId: invoice._id, bookingId: invoice.bookingId };
 
-  const client = await User.findById(invoice.clientId).select('email');
-  if (client?.email) {
-    sendPaymentSuccessEmail(client.email, {
-      transactionId: params.razorpayPaymentId,
-      amount: invoice.totalAmount.toLocaleString('en-IN'),
+  if (isExtraPartsPayment) {
+    // Extra parts payment: notify admin, master technician, and the assigned technician.
+    await notifyByRoles(['admin', 'master_technician'], {
+      title: 'Extra parts payment received',
+      body: `₹${paidNow.toLocaleString('en-IN')} extra parts payment received for ${bookingRef} (invoice ${invoice.invoiceNumber}).`,
+      type: 'success',
+      category: 'payment',
+      data: notificationData,
+    });
+
+    const technicianInCharge = booking?.technicianId ?? booking?.assignedTechnicianId;
+    if (technicianInCharge) {
+      await notifyUsers([technicianInCharge], {
+        title: 'Extra parts payment received',
+        body: `The client paid ₹${paidNow.toLocaleString('en-IN')} for extra parts on ${bookingRef}.`,
+        type: 'success',
+        category: 'payment',
+        data: notificationData,
+      });
+    }
+  } else {
+    await notifyByRoles(['admin'], {
+      title: 'Payment received',
+      body: `Invoice ${invoice.invoiceNumber} paid — ₹${invoice.totalAmount.toLocaleString('en-IN')}. Booking ready to assign.`,
+      type: 'success',
+      category: 'payment',
+      data: notificationData,
     });
   }
 

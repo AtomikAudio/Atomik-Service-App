@@ -747,13 +747,13 @@ const styles = StyleSheet.create({
   },
   serviceChip: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(237,29,36,0.12)',
+    backgroundColor: 'rgba(142,48,47,0.12)',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(237,29,36,0.25)',
+    borderColor: 'rgba(142,48,47,0.25)',
   },
   serviceChipText: {
     fontFamily: 'Montserrat_500Medium',
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
   },
   statusBtnActive: {
     borderColor: COLORS.red,
-    backgroundColor: 'rgba(237,29,36,0.12)',
+    backgroundColor: 'rgba(142,48,47,0.12)',
   },
   statusBtnText: {
     fontFamily: 'Montserrat_600SemiBold',

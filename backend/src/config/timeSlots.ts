@@ -1,14 +1,9 @@
-/** Bookable time slots (IST labels — normalized with `normalizeScheduledTime`). */
-export const BOOKING_TIME_SLOTS = [
-  '09:00 AM',
-  '10:00 AM',
-  '11:00 AM',
-  '12:00 PM',
-  '02:00 PM',
-  '03:00 PM',
-  '04:00 PM',
-  '05:00 PM',
-] as const;
+/**
+ * Bookable time slots (IST labels — normalized with `normalizeScheduledTime`).
+ * 3-hour cadence starting 11 AM. General Service uses only 11 AM (1 slot);
+ * General Visit uses all three. Both are valid here so the backend accepts either.
+ */
+export const BOOKING_TIME_SLOTS = ['11:00 AM', '02:00 PM', '05:00 PM'] as const;
 
 export type BookingTimeSlot = (typeof BOOKING_TIME_SLOTS)[number];
 

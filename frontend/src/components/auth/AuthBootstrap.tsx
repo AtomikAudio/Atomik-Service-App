@@ -22,10 +22,29 @@ export const AuthBootstrap: React.FC<Props> = ({ children }) => {
     });
 
     const bootstrap = async () => {
+      // Warm the API in the background so login / validation are fast later,
+      // without blocking first paint on a cold start.
+      warmupApi().catch(() => {});
+
       try {
         await purgeDemoSessionToken();
-        // Wake the API first so session validation does not fail on a cold start.
-        await warmupApi();
+
+        // Fast path: restore the locally cached session instantly so returning
+        // users see the app immediately, then validate/refresh in the background.
+        const cached = await authService.loadCachedSession();
+        if (cached) {
+          dispatch(restoreSession(cached));
+          authService
+            .loadStoredSession()
+            .then((fresh) => {
+              if (fresh) dispatch(restoreSession(fresh));
+              else dispatch(logout());
+            })
+            .catch(() => {});
+          return;
+        }
+
+        // No usable cache: validate any stored token, otherwise show login.
         const session = await authService.loadStoredSession();
         if (session) {
           dispatch(restoreSession(session));

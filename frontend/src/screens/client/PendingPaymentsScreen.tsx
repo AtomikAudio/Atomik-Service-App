@@ -137,7 +137,7 @@ export const PendingPaymentsScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="checkmark-circle-outline" size={48} color="#4caf7d" />
+            <Ionicons name="checkmark-circle-outline" size={48} color={COLORS.ashGray} />
             <Text style={styles.emptyText}>No pending payments</Text>
           </View>
         }
@@ -149,9 +149,9 @@ export const PendingPaymentsScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   totalBanner: {
-    backgroundColor: 'rgba(237,29,36,0.1)',
+    backgroundColor: 'rgba(142,48,47,0.1)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(237,29,36,0.2)',
+    borderBottomColor: 'rgba(142,48,47,0.2)',
     paddingHorizontal: 20,
     paddingVertical: 16,
     flexDirection: 'row',
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(237,29,36,0.15)',
+    borderColor: 'rgba(142,48,47,0.15)',
     padding: 16,
   },
   cardHeader: {

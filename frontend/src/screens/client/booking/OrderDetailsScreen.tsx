@@ -7,6 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
+import { Button } from '../../../components/common/Button';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { COLORS } from '../../../constants/colors';
 
@@ -28,9 +29,6 @@ export const OrderDetailsScreen: React.FC<Props> = ({ navigation }) => {
       <BookingFlowHeader
         title="Details"
         onBack={() => navigation.goBack()}
-        rightLabel="Save"
-        onRight={save}
-        rightDisabled={!text.trim()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.label}>TECHNICAL NOTES</Text>
@@ -46,6 +44,15 @@ export const OrderDetailsScreen: React.FC<Props> = ({ navigation }) => {
           multiline
           textAlignVertical="top"
         />
+        <View style={styles.saveRow}>
+          <Button
+            label="SAVE"
+            onPress={save}
+            disabled={!text.trim()}
+            fullWidth={false}
+            style={styles.saveBtn}
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -79,5 +86,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.white,
     lineHeight: 22,
+  },
+  saveRow: {
+    alignItems: 'center',
+    marginTop: 28,
+  },
+  saveBtn: {
+    minWidth: 200,
+    paddingHorizontal: 32,
   },
 });

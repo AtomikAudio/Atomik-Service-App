@@ -25,21 +25,21 @@ const slides = [
     icon: 'radio-outline',
     title: 'Elite Audio\nService Network',
     desc: 'Connect with certified audio engineers for precision maintenance of your sound infrastructure.',
-    accent: '#ed1d24',
+    accent: '#8e302f',
   },
   {
     id: '2',
     icon: 'calendar-outline',
     title: 'Schedule\nWith Precision',
     desc: 'Book general service, inspections, or emergency visits at your venue with real-time technician assignment.',
-    accent: '#ed1d24',
+    accent: '#8e302f',
   },
   {
     id: '3',
     icon: 'analytics-outline',
     title: 'Track Every\nService Detail',
     desc: 'Live status updates, technician tracking, invoice management — complete visibility from booking to completion.',
-    accent: '#ed1d24',
+    accent: '#8e302f',
   },
 ];
 
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(237, 29, 36, 0.2)',
+    borderColor: 'rgba(142, 48, 47, 0.2)',
   },
   ring1: {
     width: 130,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   ring2: {
     width: 160,
     height: 160,
-    borderColor: 'rgba(237, 29, 36, 0.08)',
+    borderColor: 'rgba(142, 48, 47, 0.08)',
   },
   slideContent: {
     alignItems: 'flex-start',

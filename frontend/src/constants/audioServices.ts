@@ -105,6 +105,39 @@ export const GENERAL_SERVICE_ITEMS: AudioServiceItem[] = [
   },
 ];
 
+/** Fixed General Service package (no per-item selection). */
+export const GENERAL_SERVICE_PACKAGE: AudioServiceItem = {
+  id: 'general-service',
+  label: 'General Service',
+  icon: 'hardware-chip-outline',
+  apiType: 'general',
+  duration: '4–6 hrs',
+  basePrice: '₹15,000',
+  description: 'Complete sound system service package',
+};
+
+/** What the General Service package includes (display-only, not selectable). */
+export const GENERAL_SERVICE_INCLUSIONS: { id: string; label: string; icon: string }[] = [
+  {
+    id: 'tuning',
+    label: 'Tuning & Alignment of the Sound System',
+    icon: 'options-outline',
+  },
+  {
+    id: 'amp-rack',
+    label: 'Reassembly of the Amplifier Rack',
+    icon: 'construct-outline',
+  },
+  {
+    id: 'damage-check',
+    label: 'Inspection for Any Damage',
+    icon: 'shield-checkmark-outline',
+  },
+];
+
+/** Fixed subtotal shown on the General Service screen. */
+export const GENERAL_SERVICE_PRICE = '₹15,000';
+
 /** @deprecated Not shown on Categories screen — select via General Service → Others */
 export const OTHERS_SERVICE_GROUP: ServiceGroup = {
   id: 'others',
@@ -126,6 +159,7 @@ export const GENERAL_VISIT_ITEM: AudioServiceItem = {
 };
 
 export const ALL_SERVICE_ITEMS: AudioServiceItem[] = [
+  GENERAL_SERVICE_PACKAGE,
   ...GENERAL_SERVICE_ITEMS,
   GENERAL_VISIT_ITEM,
 ];

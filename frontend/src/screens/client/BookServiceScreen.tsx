@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   serviceCardSelected: {
     borderColor: COLORS.red,
-    backgroundColor: 'rgba(237, 29, 36, 0.08)',
+    backgroundColor: 'rgba(142, 48, 47, 0.08)',
   },
   serviceLabel: {
     fontFamily: 'Montserrat_600SemiBold',

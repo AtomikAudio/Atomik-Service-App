@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import {
   EXTRA_PARTS_CHARGE_NOTE,
+  GENERAL_SERVICE_INCLUSIONS,
   GENERAL_SERVICE_ITEMS,
+  GENERAL_SERVICE_PACKAGE,
+  GENERAL_SERVICE_PRICE,
 } from '../../../constants/audioServices';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { COLORS } from '../../../constants/colors';
@@ -20,22 +23,11 @@ interface Props {
 }
 
 export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
-  const { draft, addCategory, removeCategory } = useBookingDraft();
-  const [selected, setSelected] = useState<string[]>(
-    draft.categoryIds.filter((id) =>
-      GENERAL_SERVICE_ITEMS.some((s) => s.id === id)
-    )
-  );
-
-  const toggle = (id: string) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
+  const { addCategory, removeCategory } = useBookingDraft();
 
   const continueFlow = () => {
     GENERAL_SERVICE_ITEMS.forEach((s) => removeCategory(s.id));
-    selected.forEach((id) => addCategory(id));
+    addCategory(GENERAL_SERVICE_PACKAGE.id);
     navigation.navigate('PlaceOrder');
   };
 
@@ -49,48 +41,30 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionLabel}>EQUIPMENT MODULES</Text>
+        <Text style={styles.sectionLabel}>WHAT'S INCLUDED</Text>
         <Text style={styles.hint}>
-          Select one or more services for your booking.
+          Your General Service package covers the following.
         </Text>
 
-        {GENERAL_SERVICE_ITEMS.map((item) => {
-          const active = selected.includes(item.id);
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.row, active && styles.rowActive]}
-              onPress={() => toggle(item.id)}
-              activeOpacity={0.85}
-            >
-              <View
-                style={[styles.rowIcon, active && styles.rowIconActive]}
-              >
-                <Ionicons
-                  name={item.icon as keyof typeof Ionicons.glyphMap}
-                  size={22}
-                  color={active ? COLORS.red : COLORS.gray}
-                />
-              </View>
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>{item.label}</Text>
-                <Text style={styles.rowDesc}>{item.description}</Text>
-                <View style={styles.rowMeta}>
-                  <Text style={styles.rowDuration}>{item.duration}</Text>
-                  <Text style={styles.rowDot}>·</Text>
-                  <Text style={styles.rowPrice}>{item.basePrice}</Text>
-                </View>
-              </View>
-              <View
-                style={[styles.check, active && styles.checkActive]}
-              >
-                {active && (
-                  <Ionicons name="checkmark" size={14} color={COLORS.white} />
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        {GENERAL_SERVICE_INCLUSIONS.map((item) => (
+          <View key={item.id} style={styles.row}>
+            <View style={styles.rowIcon}>
+              <Ionicons
+                name={item.icon as keyof typeof Ionicons.glyphMap}
+                size={22}
+                color={COLORS.red}
+              />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{item.label}</Text>
+            </View>
+          </View>
+        ))}
+
+        <View style={styles.subtotalRow}>
+          <Text style={styles.subtotalLabel}>Subtotal</Text>
+          <Text style={styles.subtotalValue}>{GENERAL_SERVICE_PRICE} + GST</Text>
+        </View>
 
         <View style={styles.chargeNote}>
           <Ionicons
@@ -104,19 +78,8 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.continueBtn, selected.length === 0 && styles.disabled]}
-          disabled={selected.length === 0}
-          onPress={continueFlow}
-        >
-          <Text
-            style={[
-              styles.continueText,
-              selected.length === 0 && styles.continueTextDisabled,
-            ]}
-          >
-            CONTINUE{selected.length > 0 ? ` (${selected.length})` : ''}
-          </Text>
+        <TouchableOpacity style={styles.continueBtn} onPress={continueFlow}>
+          <Text style={styles.continueText}>CONTINUE</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -151,67 +114,42 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 14,
   },
-  rowActive: {
-    borderColor: COLORS.borderActive,
-    backgroundColor: 'rgba(237, 29, 36, 0.06)',
-  },
   rowIcon: {
     width: 44,
     height: 44,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: COLORS.redMuted,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  rowIconActive: {
-    backgroundColor: COLORS.redMuted,
   },
   rowText: { flex: 1 },
   rowTitle: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
     color: COLORS.white,
-    marginBottom: 3,
   },
-  rowDesc: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
-    color: COLORS.gray,
-    lineHeight: 15,
-  },
-  rowMeta: {
+  subtotalRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    gap: 6,
+    justifyContent: 'space-between',
+    marginTop: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.borderActive,
+    backgroundColor: 'rgba(142, 48, 47, 0.06)',
   },
-  rowDuration: {
-    fontFamily: 'SpaceMono_400Regular',
-    fontSize: 9,
-    color: COLORS.grayDark,
+  subtotalLabel: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 14,
+    color: COLORS.white,
+    letterSpacing: 0.5,
   },
-  rowDot: {
-    fontFamily: 'SpaceMono_400Regular',
-    fontSize: 9,
-    color: COLORS.grayDark,
-  },
-  rowPrice: {
-    fontFamily: 'Montserrat_600SemiBold',
-    fontSize: 11,
+  subtotalValue: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 16,
     color: COLORS.red,
-  },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: COLORS.grayDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkActive: {
-    backgroundColor: COLORS.red,
-    borderColor: COLORS.red,
   },
   footer: {
     position: 'absolute',
@@ -231,17 +169,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  disabled: {
-    backgroundColor: COLORS.surface,
-  },
   continueText: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 13,
     color: COLORS.white,
     letterSpacing: 2,
-  },
-  continueTextDisabled: {
-    color: COLORS.grayDark,
   },
   chargeNote: {
     flexDirection: 'row',

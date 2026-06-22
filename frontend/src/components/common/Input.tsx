@@ -73,7 +73,7 @@ export const Input: React.FC<InputProps> = ({
     inputRange: [0, 1],
     outputRange: [
       error ? COLORS.red : 'rgba(255,255,255,0.08)',
-      error ? COLORS.red : 'rgba(237,29,36,0.55)',
+      error ? COLORS.red : 'rgba(142,48,47,0.55)',
     ],
   });
 

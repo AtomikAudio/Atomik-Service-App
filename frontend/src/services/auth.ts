@@ -8,7 +8,6 @@ import {
   setToken,
 } from './tokenStore';
 import { getApiBaseUrl } from '../config/apiConfig';
-import { warmupApi } from './apiWarmup';
 
 export interface AuthUser {
   id: string;
@@ -116,7 +115,6 @@ export const authService = {
     const trimmed = identifier.trim();
 
     try {
-      await warmupApi();
       const raw = (await api.post('/auth/login', {
         identifier: trimmed,
         password,
@@ -158,7 +156,6 @@ export const authService = {
     phone: string,
     purpose: OtpPurpose = 'signup'
   ): Promise<{ expiresIn: number; phone: string; resendAfter: number }> {
-    await warmupApi();
     const raw = (await api.post('/auth/send-otp', {
       phone: phone.trim(),
       purpose,
@@ -231,7 +228,6 @@ export const authService = {
     otp: string,
     role: 'client' | 'technician' = 'client'
   ): Promise<LoginResponse> {
-    await warmupApi();
     const raw = (await api.post('/auth/login/phone', {
       phone: phone.trim(),
       otp: otp.trim(),
@@ -361,6 +357,21 @@ export const authService = {
    * Falls back to the cached user when the device is offline so reopening the
    * app keeps the user signed in.
    */
+  /**
+   * Fast, local-only session restore (no network). Returns the cached user +
+   * token instantly so the app can render without waiting on the API. Use
+   * loadStoredSession() afterwards to validate/refresh in the background.
+   */
+  async loadCachedSession(): Promise<LoginResponse | null> {
+    const token = await getToken();
+    if (!token || isDemoSessionToken(token)) {
+      return null;
+    }
+    const cached = await getCachedUser<AuthUser>();
+    if (!cached) return null;
+    return { user: cached, token };
+  },
+
   async loadStoredSession(): Promise<LoginResponse | null> {
     const token = await getToken();
     if (!token || isDemoSessionToken(token)) {

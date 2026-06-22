@@ -12,7 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
 import { useLayoutInsets } from '../../hooks/useLayoutInsets';
-import { SplashHorizon } from '../../components/common/SplashHorizon';
 import { PressableScale } from '../../components/common/PressableScale';
 import { EASE_OUT } from '../../utils/motion';
 
@@ -28,7 +27,6 @@ interface Props {
 
 export const SplashScreen: React.FC<Props> = ({ navigation }) => {
   const { bottom: bottomInset } = useLayoutInsets();
-  const decorOpacity = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.94)).current;
   const logoY = useRef(new Animated.Value(12)).current;
@@ -38,13 +36,7 @@ export const SplashScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     Animated.sequence([
-      Animated.delay(120),
-      Animated.timing(decorOpacity, {
-        toValue: 1,
-        duration: 1100,
-        easing: EASE_OUT,
-        useNativeDriver: true,
-      }),
+      Animated.delay(220),
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
@@ -97,19 +89,6 @@ export const SplashScreen: React.FC<Props> = ({ navigation }) => {
         locations={[0, 0.4, 0.75, 1]}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Dotted mountain + horizon (SVG, crisp on retina) */}
-      <Animated.View
-        style={[styles.decor, { opacity: decorOpacity }]}
-        pointerEvents="none"
-      >
-        <SplashHorizon height={Math.round(height * 0.82)} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.35)', '#000000']}
-          style={styles.decorFade}
-          pointerEvents="none"
-        />
-      </Animated.View>
 
       <View style={styles.hero}>
         <Animated.View
@@ -165,21 +144,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  decor: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: height * 0.2,
-    alignItems: 'center',
-  },
-  decorFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: height * 0.35,
   },
   hero: {
     flex: 1,

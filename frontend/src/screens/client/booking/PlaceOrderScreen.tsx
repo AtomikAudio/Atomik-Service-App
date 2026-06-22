@@ -18,10 +18,7 @@ import { bookingService } from '../../../services/bookings';
 import { COLORS } from '../../../constants/colors';
 import { formatBookingDate, formatBookingTime } from '../../../utils/schedule';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  formatHoldCountdown,
-  useSlotHoldTimer,
-} from '../../../hooks/useSlotHoldTimer';
+import { useSlotHoldTimer } from '../../../hooks/useSlotHoldTimer';
 
 interface Props {
   navigation: any;
@@ -41,8 +38,11 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
     draft.slotHoldExpiresAt ?? null
   );
 
+  // secondsLeft drives a re-render each second so holdActive re-evaluates.
   const secondsLeft = useSlotHoldTimer(holdExpiresAt);
-  const holdActive = Boolean(holdExpiresAt && secondsLeft > 0);
+  const holdActive =
+    Boolean(holdExpiresAt) &&
+    new Date(holdExpiresAt as string).getTime() > Date.now();
 
   const refreshHold = useCallback(async () => {
     if (!draft.scheduledDate || !draft.scheduledTime) return;
@@ -71,7 +71,9 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (holdExpiresAt && secondsLeft === 0) {
+    // Clear only once the hold timestamp has truly passed (avoids wiping a
+    // freshly-refreshed hold before the timer's first tick updates secondsLeft).
+    if (holdExpiresAt && new Date(holdExpiresAt).getTime() <= Date.now()) {
       setHoldExpiresAt(null);
     }
   }, [secondsLeft, holdExpiresAt]);
@@ -133,14 +135,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {holdActive ? (
-          <View style={styles.holdBanner}>
-            <Ionicons name="time-outline" size={18} color={COLORS.white} />
-            <Text style={styles.holdBannerText}>
-              {formatHoldCountdown(secondsLeft)} left to complete your booking
-            </Text>
-          </View>
-        ) : draft.scheduledTime ? (
+        {!holdActive && draft.scheduledTime ? (
           <View style={styles.holdExpiredBanner}>
             <Text style={styles.holdExpiredText}>
               Slot reservation expired — update your schedule before placing the order

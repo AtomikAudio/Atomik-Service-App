@@ -19,8 +19,11 @@
       "android": {
         "buildType": "apk"
       },
+      "ios": {
+        "simulator": false
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_STAGING_API_HOST/api"
+        "EXPO_PUBLIC_API_URL": "https://atomik-api.onrender.com/api"
       }
     },
     "production": {

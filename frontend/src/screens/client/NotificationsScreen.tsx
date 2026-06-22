@@ -22,7 +22,7 @@ import { COLORS } from '../../constants/colors';
 const iconMap = {
   info: { name: 'information-circle' as const, color: '#4a9edd' },
   warning: { name: 'alert-circle' as const, color: COLORS.red },
-  success: { name: 'checkmark-circle' as const, color: '#4caf7d' },
+  success: { name: 'checkmark-circle' as const, color: COLORS.ashGray },
   error: { name: 'close-circle' as const, color: COLORS.red },
 };
 
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   unread: {
     borderLeftWidth: 3,
     borderLeftColor: COLORS.red,
-    backgroundColor: 'rgba(237, 29, 36, 0.06)',
+    backgroundColor: 'rgba(142, 48, 47, 0.06)',
   },
   content: { flex: 1 },
   title: {

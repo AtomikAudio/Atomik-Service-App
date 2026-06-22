@@ -7,10 +7,11 @@
   },
   "scripts": {
     "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/free-port.ps1 && nodemon --exec ts-node src/server.ts",
-    "build": "tsc && node -e \"require('fs').cpSync('src/templates/html','dist/templates/html',{recursive:true})\"",
+    "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest",
     "seed": "ts-node src/scripts/seed.ts",
+    "seed:staff": "ts-node src/scripts/seedStaff.ts",
     "clear-demo-data": "ts-node src/scripts/clearDemoData.ts",
     "twilio:test": "ts-node src/scripts/testTwilio.ts",
     "check-secrets": "ts-node scripts/check-secrets.ts"

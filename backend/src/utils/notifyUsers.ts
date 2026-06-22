@@ -27,7 +27,7 @@ export const notifyUsers = async (
 };
 
 export const notifyByRoles = async (
-  roles: ('admin' | 'technician' | 'client')[],
+  roles: ('admin' | 'technician' | 'master_technician' | 'client')[],
   payload: Parameters<typeof notifyUsers>[1]
 ) => {
   const users = await User.find({

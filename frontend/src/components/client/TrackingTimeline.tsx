@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     width: DOT_ACTIVE + 12,
     height: DOT_ACTIVE + 12,
     borderRadius: (DOT_ACTIVE + 12) / 2,
-    backgroundColor: 'rgba(237, 29, 36, 0.25)',
+    backgroundColor: 'rgba(142, 48, 47, 0.25)',
   },
   dot: {
     borderRadius: 99,
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     width: DOT_ACTIVE,
     height: DOT_ACTIVE,
     backgroundColor: COLORS.timelineActive,
-    borderColor: 'rgba(237, 29, 36, 0.5)',
+    borderColor: 'rgba(142, 48, 47, 0.5)',
     shadowColor: COLORS.timelineActive,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.85,

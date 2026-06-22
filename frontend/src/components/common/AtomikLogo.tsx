@@ -8,11 +8,11 @@ interface AtomikLogoProps {
 }
 
 const SIZES = {
-  sm: { h: 24, hw: 3.8, vw: 0.92 },
-  md: { h: 34, hw: 4, vw: 0.95 },
-  lg: { h: 46, hw: 4.2, vw: 0.95 },
-  hero: { h: 56, hw: 4.5, vw: 0.95 },
-  xl: { h: 68, hw: 4.5, vw: 0.95 },
+  sm: { h: 26, hw: 3.8, vw: 0.92 },
+  md: { h: 37, hw: 4, vw: 0.95 },
+  lg: { h: 50, hw: 4.2, vw: 0.95 },
+  hero: { h: 60, hw: 4.5, vw: 0.95 },
+  xl: { h: 73, hw: 4.5, vw: 0.95 },
 };
 
 /** Transparent white mark — no baked-in background */

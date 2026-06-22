@@ -51,8 +51,8 @@ const styles = StyleSheet.create({
   card: {
     marginTop: 16,
     borderWidth: 1,
-    borderColor: 'rgba(237,29,36,0.2)',
-    backgroundColor: 'rgba(237,29,36,0.06)',
+    borderColor: 'rgba(142,48,47,0.2)',
+    backgroundColor: 'rgba(142,48,47,0.06)',
   },
   header: {
     flexDirection: 'row',
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: 'rgba(237,29,36,0.12)',
+    backgroundColor: 'rgba(142,48,47,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },

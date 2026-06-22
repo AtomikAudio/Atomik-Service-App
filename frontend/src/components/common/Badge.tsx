@@ -13,8 +13,8 @@ interface BadgeProps {
 const variantStyles: Record<BadgeVariant, { bg: string; text: string; border: string }> = {
   confirmed: {
     bg: COLORS.statusConfirmedBg,
-    text: '#4caf7d',
-    border: 'rgba(76, 175, 125, 0.3)',
+    text: COLORS.ashGray,
+    border: COLORS.ashGrayBorder,
   },
   pending: {
     bg: COLORS.statusPendingBg,
@@ -28,18 +28,18 @@ const variantStyles: Record<BadgeVariant, { bg: string; text: string; border: st
   },
   completed: {
     bg: COLORS.statusCompletedBg,
-    text: '#4caf7d',
-    border: 'rgba(76, 175, 125, 0.3)',
+    text: COLORS.ashGray,
+    border: COLORS.ashGrayBorder,
   },
   new: {
-    bg: 'rgba(237, 29, 36, 0.15)',
+    bg: 'rgba(142, 48, 47, 0.15)',
     text: COLORS.red,
-    border: 'rgba(237, 29, 36, 0.3)',
+    border: 'rgba(142, 48, 47, 0.3)',
   },
   due: {
-    bg: 'rgba(237, 29, 36, 0.1)',
+    bg: 'rgba(142, 48, 47, 0.1)',
     text: COLORS.red,
-    border: 'rgba(237, 29, 36, 0.25)',
+    border: 'rgba(142, 48, 47, 0.25)',
   },
 };
 

@@ -5,9 +5,9 @@ export const COLORS = {
   surfaceElevated: '#332e2f',
 
   // Accent
-  red: '#ed1d24',
-  redDark: '#b71c1f',
-  redMuted: 'rgba(237, 29, 36, 0.15)',
+  red: '#8e302f',
+  redDark: '#6e2524',
+  redMuted: 'rgba(142, 48, 47, 0.15)',
 
   // Text
   white: '#ffffff',
@@ -17,24 +17,29 @@ export const COLORS = {
 
   // Borders
   border: 'rgba(255, 255, 255, 0.08)',
-  borderActive: 'rgba(237, 29, 36, 0.5)',
+  borderActive: 'rgba(142, 48, 47, 0.5)',
+
+  // Ash gray (replaces former green success/confirmed accents)
+  ashGray: '#b2beb5',
+  ashGrayBg: 'rgba(178, 190, 181, 0.15)',
+  ashGrayBorder: 'rgba(178, 190, 181, 0.3)',
 
   // Status
-  statusConfirmed: '#2d7d46',
-  statusConfirmedBg: 'rgba(45, 125, 70, 0.15)',
+  statusConfirmed: '#b2beb5',
+  statusConfirmedBg: 'rgba(178, 190, 181, 0.15)',
   statusPending: '#b8860b',
   statusPendingBg: 'rgba(184, 134, 11, 0.15)',
   statusOngoing: '#1a6b9e',
   statusOngoingBg: 'rgba(26, 107, 158, 0.15)',
-  statusCompleted: '#2d7d46',
-  statusCompletedBg: 'rgba(45, 125, 70, 0.15)',
+  statusCompleted: '#b2beb5',
+  statusCompletedBg: 'rgba(178, 190, 181, 0.15)',
 
   // Overlay
   overlay: 'rgba(35, 31, 32, 0.92)',
   glass: 'rgba(43, 39, 40, 0.6)',
 
   // Timeline
-  timelineActive: '#ed1d24',
+  timelineActive: '#8e302f',
   timelineInactive: '#4a4547',
   timelinePending: '#2b2728',
 };

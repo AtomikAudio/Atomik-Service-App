@@ -156,15 +156,15 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
     <Screen>
       <DashboardTopBar
         onNotificationsPress={() => navigation.navigate('Notifications')}
-        rightAccessory={
+      />
+      <SafeScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.greetingRow}>
+          <Text style={styles.greeting}>Hey, {user?.name || 'Technician'}</Text>
           <View style={styles.statusPill}>
             <View style={styles.onlineDot} />
             <Text style={styles.statusText}>ON DUTY</Text>
           </View>
-        }
-      />
-      <SafeScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.greeting}>Hey, {user?.name || 'Technician'}</Text>
+        </View>
         <Text style={styles.greetingRole}>
           {isMaster ? 'Master Technician' : 'Field Technician'}
         </Text>
@@ -279,26 +279,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(76,175,125,0.15)',
+    backgroundColor: COLORS.ashGrayBg,
     flexShrink: 0,
   },
   onlineDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#4caf7d',
+    backgroundColor: COLORS.ashGray,
   },
   statusText: {
     fontFamily: 'SpaceMono_400Regular',
     fontSize: 10,
-    color: '#4caf7d',
+    color: COLORS.ashGray,
     letterSpacing: 0.5,
   },
   scroll: { padding: 20, paddingBottom: 100 },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   greeting: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 22,
     color: COLORS.white,
+    flexShrink: 1,
   },
   greetingRole: {
     fontFamily: 'Montserrat_400Regular',
@@ -308,7 +315,7 @@ const styles = StyleSheet.create({
   },
   masterCard: {
     marginBottom: 20,
-    borderColor: 'rgba(237,29,36,0.35)',
+    borderColor: 'rgba(142,48,47,0.35)',
     borderWidth: 1,
   },
   masterCardTitle: {

@@ -242,12 +242,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: COLORS.red,
     letterSpacing: 2,
-    backgroundColor: 'rgba(237,29,36,0.1)',
+    backgroundColor: 'rgba(142,48,47,0.1)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(237,29,36,0.25)',
+    borderColor: 'rgba(142,48,47,0.25)',
   },
   statsRow: {
     flexDirection: 'row',
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   menuIconDanger: {
-    backgroundColor: 'rgba(237,29,36,0.1)',
+    backgroundColor: 'rgba(142,48,47,0.1)',
   },
   menuLabel: {
     fontFamily: 'Montserrat_500Medium',

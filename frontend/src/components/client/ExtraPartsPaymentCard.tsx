@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(237, 29, 36, 0.25)',
+    borderColor: 'rgba(142, 48, 47, 0.25)',
   },
   payBox: {
     marginTop: 14,

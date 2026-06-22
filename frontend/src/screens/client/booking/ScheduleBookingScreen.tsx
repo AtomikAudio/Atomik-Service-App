@@ -15,15 +15,14 @@ import { Button } from '../../../components/common/Button';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { COLORS } from '../../../constants/colors';
 import {
-  BOOKING_TIME_SLOTS,
+  slotsForServiceType,
+  slotDisplayLabel,
   SlotAvailabilityItem,
   SlotStatus,
 } from '../../../constants/timeSlots';
+import { resolvePrimaryServiceType } from '../../../constants/audioServices';
 import { bookingService } from '../../../services/bookings';
-import {
-  formatHoldCountdown,
-  useSlotHoldTimer,
-} from '../../../hooks/useSlotHoldTimer';
+import { useSlotHoldTimer } from '../../../hooks/useSlotHoldTimer';
 import {
   parseDraftScheduleDate,
   formatMonthYearIST,
@@ -41,6 +40,8 @@ interface Props {
 
 export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
   const { draft, setDraft } = useBookingDraft();
+  const serviceType = resolvePrimaryServiceType(draft.categoryIds);
+  const timeSlots = slotsForServiceType(serviceType);
   const istNow = getISTDateParts();
   const [month, setMonth] = useState(istNow.month);
   const [year, setYear] = useState(istNow.year);
@@ -54,8 +55,11 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
   const [holdingSlot, setHoldingSlot] = useState(false);
   const selectedDateRef = useRef<string | null>(null);
 
+  // secondsLeft drives a re-render each second so holdActive re-evaluates.
   const secondsLeft = useSlotHoldTimer(holdExpiresAt);
-  const holdActive = Boolean(holdExpiresAt && secondsLeft > 0);
+  const holdActive =
+    Boolean(holdExpiresAt) &&
+    new Date(holdExpiresAt as string).getTime() > Date.now();
 
   const dateIso =
     selectedDay != null
@@ -113,16 +117,21 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (holdExpiresAt && secondsLeft === 0 && selectedTime) {
-      setSelectedTime('');
-      setHoldExpiresAt(null);
-      setDraft((d) => ({
-        ...d,
-        scheduledTime: undefined,
-        slotHoldExpiresAt: undefined,
-      }));
-      if (dateIso) loadAvailability(dateIso);
-    }
+    if (!holdExpiresAt || !selectedTime) return;
+    // Only treat the hold as expired once its timestamp has actually passed.
+    // Relying on `secondsLeft === 0` alone is unsafe because the timer starts
+    // at 0 before its first tick, which would wrongly clear a brand-new hold
+    // and trigger an endless clear -> reload -> restore loop.
+    const expired = new Date(holdExpiresAt).getTime() <= Date.now();
+    if (!expired) return;
+    setSelectedTime('');
+    setHoldExpiresAt(null);
+    setDraft((d) => ({
+      ...d,
+      scheduledTime: undefined,
+      slotHoldExpiresAt: undefined,
+    }));
+    if (dateIso) loadAvailability(dateIso);
   }, [secondsLeft, holdExpiresAt, selectedTime, dateIso, loadAvailability, setDraft]);
 
   const selectDay = async (day: number) => {
@@ -216,14 +225,7 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {holdActive ? (
-          <View style={styles.holdBanner}>
-            <Ionicons name="time-outline" size={18} color={COLORS.white} />
-            <Text style={styles.holdBannerText}>
-              {formatHoldCountdown(secondsLeft)} left to complete your booking
-            </Text>
-          </View>
-        ) : selectedTime ? (
+        {!holdActive && selectedTime ? (
           <View style={styles.holdExpiredBanner}>
             <Text style={styles.holdExpiredText}>
               Your slot reservation expired — select a time again
@@ -268,22 +270,26 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
               return (
                 <TouchableOpacity
                   key={d}
-                  style={[
-                    styles.cell,
-                    selectedDay === d && styles.cellSelected,
-                    past && styles.cellPast,
-                  ]}
+                  style={styles.cell}
                   disabled={past}
                   onPress={() => selectDay(d)}
                 >
-                  <Text
+                  <View
                     style={[
-                      styles.cellText,
-                      selectedDay === d && styles.cellTextSel,
+                      styles.cellInner,
+                      selectedDay === d && styles.cellSelected,
+                      past && styles.cellPast,
                     ]}
                   >
-                    {d}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.cellText,
+                        selectedDay === d && styles.cellTextSel,
+                      ]}
+                    >
+                      {d}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -301,7 +307,7 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.hint}>Select a date to see available time slots</Text>
         ) : (
           <View style={styles.slots}>
-            {BOOKING_TIME_SLOTS.map((slot) => {
+            {timeSlots.map((slot) => {
               const info = slotMap[slot];
               const { touchable, text, disabled } = slotStyle(slot, info?.status);
               return (
@@ -311,12 +317,7 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
                   disabled={disabled}
                   onPress={() => selectSlot(slot)}
                 >
-                  <Text style={text}>{slot}</Text>
-                  {info?.status === 'booked' ? (
-                    <Text style={styles.slotBadge}>Booked</Text>
-                  ) : info?.status === 'held_by_other' ? (
-                    <Text style={styles.slotBadge}>Held</Text>
-                  ) : null}
+                  <Text style={text}>{slotDisplayLabel(slot, serviceType)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -409,7 +410,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellSelected: { backgroundColor: COLORS.red, borderRadius: 4 },
+  cellInner: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cellSelected: { backgroundColor: COLORS.red },
   cellPast: { opacity: 0.3 },
   cellText: {
     fontFamily: 'Montserrat_500Medium',
@@ -436,14 +444,15 @@ const styles = StyleSheet.create({
   },
   slots: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   slot: {
+    height: 46,
     paddingHorizontal: 14,
-    paddingVertical: 10,
     backgroundColor: COLORS.surface,
     borderRadius: 4,
     borderWidth: 1,
     borderColor: COLORS.border,
     minWidth: 100,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   slotSelected: {
     backgroundColor: COLORS.red,
@@ -463,13 +472,6 @@ const styles = StyleSheet.create({
   },
   slotTextSel: { color: COLORS.white },
   slotTextDisabled: { color: COLORS.grayDark },
-  slotBadge: {
-    fontFamily: 'SpaceMono_400Regular',
-    fontSize: 7,
-    color: COLORS.grayDark,
-    marginTop: 4,
-    letterSpacing: 0.5,
-  },
   footer: {
     position: 'absolute',
     bottom: 0,

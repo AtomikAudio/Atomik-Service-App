@@ -17,8 +17,6 @@ import {
   openJobFilter,
   resolveTechnicianId,
 } from '../utils/bookingAssignment';
-import { sendOrderDetailsEmail } from '../utils/sendEmails';
-import { emailTechnicianAssigned, emailServiceCompleted } from '../utils/bookingEmails';
 import { parseScheduledDate, normalizeScheduledTime, formatDateIST } from '../utils/schedule';
 import {
   redactBookingForPoolView,
@@ -146,27 +144,6 @@ export const createBooking = async (
       category: 'booking',
       data: { bookingId: booking._id },
     });
-
-    const client = await User.findById(req.user!.id).select('name email');
-    const venueDoc = populated?.venueId as { name?: string; area?: string; city?: string } | undefined;
-    if (client?.email) {
-      sendOrderDetailsEmail(client.email, {
-        clientName: client.name,
-        bookingId: booking.bookingId,
-        serviceType,
-        venueName: venueDoc?.name ?? venueName,
-        venueArea: venueDoc?.area ?? venueDoc?.city,
-        scheduledDate: formatDateIST(parsedDate),
-        scheduledTime: normalizedTime,
-        invoiceNumber: invoice.invoiceNumber,
-        serviceCharges,
-        technicianCharges,
-        spareParts,
-        taxAmount,
-        totalAmount,
-        paymentStatus: 'Pending',
-      });
-    }
 
     res.status(201).json({
       success: true,
@@ -438,13 +415,6 @@ export const updateBookingStatus = async (
         type: status === 'completed' ? 'success' : 'info',
       });
 
-      if (status === 'completed') {
-        const withClient = await Booking.findById(updated!._id).populate(
-          'clientId',
-          'email'
-        );
-        if (withClient) emailServiceCompleted(withClient);
-      }
     }
 
     res.status(200).json({
@@ -514,7 +484,6 @@ export const acceptJob = async (
     }
 
     const tech = booking.technicianId as { name?: string; phone?: string };
-    emailTechnicianAssigned(booking);
     await notifyClientBooking(booking, {
       title: 'Technician assigned',
       body: `${technicianContactLabel(tech)} has accepted your booking ${booking.bookingId}.`,
@@ -753,8 +722,6 @@ export const assignJobByMaster = async (
       return;
     }
 
-    emailTechnicianAssigned(booking);
-
     await notifyClientBooking(booking, {
       title: 'Technician assigned',
       body: `${technicianContactLabel(
@@ -843,8 +810,6 @@ export const assignTechnician = async (
       res.status(404).json({ success: false, message: 'Booking not found' });
       return;
     }
-
-    emailTechnicianAssigned(booking);
 
     await notifyClientBooking(booking, {
       title: 'Technician assigned',

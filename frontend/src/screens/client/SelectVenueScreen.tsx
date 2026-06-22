@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   venueItemSelected: {
     borderColor: COLORS.red,
-    backgroundColor: 'rgba(237, 29, 36, 0.06)',
+    backgroundColor: 'rgba(142, 48, 47, 0.06)',
   },
   venueInfo: { flex: 1 },
   venueName: {

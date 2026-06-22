@@ -18,13 +18,9 @@ import {
   getISTDateParts,
   isPastISTDate,
 } from '../../utils/schedule';
+import { slotsForServiceType, slotDisplayLabel } from '../../constants/timeSlots';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const TIME_SLOTS = [
-  '09:00 AM', '10:00 AM', '11:00 AM',
-  '12:00 PM', '02:00 PM', '03:00 PM',
-  '04:00 PM', '05:00 PM',
-];
 
 interface Props {
   navigation: any;
@@ -33,6 +29,7 @@ interface Props {
 
 export const DateTimeScreen: React.FC<Props> = ({ navigation, route }) => {
   const { serviceType, venueId } = route.params || {};
+  const timeSlots = slotsForServiceType(serviceType);
   const istNow = getISTDateParts();
   const [month, setMonth] = useState(istNow.month);
   const [year, setYear] = useState(istNow.year);
@@ -141,7 +138,7 @@ export const DateTimeScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Time Slots */}
         <Text style={styles.timeSectionTitle}>Available Time Slots</Text>
         <View style={styles.timeGrid}>
-          {TIME_SLOTS.map((slot) => (
+          {timeSlots.map((slot) => (
             <TouchableOpacity
               key={slot}
               style={[
@@ -157,7 +154,7 @@ export const DateTimeScreen: React.FC<Props> = ({ navigation, route }) => {
                   selectedTime === slot && styles.timeSlotTextSelected,
                 ]}
               >
-                {slot}
+                {slotDisplayLabel(slot, serviceType)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -273,7 +270,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dateCellToday: {
-    backgroundColor: 'rgba(237,29,36,0.15)',
+    backgroundColor: 'rgba(142,48,47,0.15)',
     borderRadius: 8,
   },
   dateCellSelected: {

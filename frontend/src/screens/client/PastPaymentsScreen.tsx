@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(76,175,125,0.2)',
+    borderColor: COLORS.ashGrayBorder,
     padding: 16,
   },
   cardHeader: {

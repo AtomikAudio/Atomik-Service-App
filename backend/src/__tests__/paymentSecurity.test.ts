@@ -26,10 +26,6 @@ jest.mock('../utils/notifyUsers', () => ({
   notifyByRoles: jest.fn(),
 }));
 
-jest.mock('../utils/sendEmails', () => ({
-  sendPaymentSuccessEmail: jest.fn(),
-}));
-
 describe('razorpay webhook signature verification', () => {
   test('returns false when secret missing', () => {
     const prev = process.env.RAZORPAY_WEBHOOK_SECRET;

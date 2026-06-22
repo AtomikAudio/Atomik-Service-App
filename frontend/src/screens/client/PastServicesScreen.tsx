@@ -62,7 +62,7 @@ export const PastServicesScreen: React.FC<Props> = ({ navigation }) => {
             #{item.bookingId} · {formatBookingSchedule(item.scheduledDate, item.scheduledTime)}
           </Text>
           <View style={styles.checkRow}>
-            <Ionicons name="checkmark-circle" size={18} color="#4caf7d" />
+            <Ionicons name="checkmark-circle" size={18} color={COLORS.ashGray} />
             <Text style={styles.completed}>Completed</Text>
           </View>
         </TouchableOpacity>
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   completed: {
     fontFamily: 'Montserrat_500Medium',
     fontSize: 12,
-    color: '#4caf7d',
+    color: COLORS.ashGray,
   },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: COLORS.gray, fontFamily: 'Montserrat_400Regular' },

@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   miniPaid: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 12,
-    color: '#4caf7d',
+    color: COLORS.ashGray,
     marginTop: 6,
   },
 });

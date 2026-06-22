@@ -6,8 +6,20 @@ export function formatHoldCountdown(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function computeSecondsLeft(expiresAt: string | null | undefined): number {
+  if (!expiresAt) return 0;
+  return Math.max(
+    0,
+    Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)
+  );
+}
+
 export function useSlotHoldTimer(expiresAt: string | null | undefined): number {
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  // Initialize from the real timestamp so the value is correct on the first
+  // render (avoids a stale 0 that can misfire expiry logic in consumers).
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    computeSecondsLeft(expiresAt)
+  );
 
   useEffect(() => {
     if (!expiresAt) {
@@ -16,11 +28,7 @@ export function useSlotHoldTimer(expiresAt: string | null | undefined): number {
     }
 
     const tick = () => {
-      const left = Math.max(
-        0,
-        Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)
-      );
-      setSecondsLeft(left);
+      setSecondsLeft(computeSecondsLeft(expiresAt));
     };
 
     tick();

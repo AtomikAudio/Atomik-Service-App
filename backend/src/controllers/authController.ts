@@ -6,7 +6,6 @@ import { toE164 } from '../utils/phone';
 import { findUserByLoginIdentifier } from '../utils/userLookup';
 import { verifyPhoneOtp } from './otpController';
 import crypto from 'crypto';
-import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/sendEmails';
 import cloudinary from '../config/cloudinary';
 import { Readable } from 'stream';
 
@@ -105,10 +104,6 @@ export const register = async (
       role: 'client',
       phoneVerified: true,
     });
-
-    if (normalizedEmail) {
-      sendWelcomeEmail(normalizedEmail, name);
-    }
 
     sendTokenResponse(user, 201, res);
   } catch (err) {
@@ -321,34 +316,11 @@ export const forgotPassword = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const email = String(req.body.email ?? '').trim().toLowerCase();
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      res.status(200).json({
-        success: true,
-        message: 'If that email exists, a reset link has been sent',
-      });
-      return;
-    }
-
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    user.passwordResetToken = crypto
-      .createHash('sha256')
-      .update(rawToken)
-      .digest('hex');
-    user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
-    await user.save({ validateBeforeSave: false });
-
-    if (user.email) {
-      sendPasswordResetEmail(user.email, rawToken);
-    }
-
+    // Email delivery has been removed, so no reset link can be sent.
+    // Always return a generic response to avoid account enumeration.
     res.status(200).json({
       success: true,
-      message: user.email
-        ? 'Password reset link sent to your email'
-        : 'If that account exists, a reset link has been sent',
+      message: 'If that email exists, a reset link has been sent',
     });
   } catch (err) {
     next(err);

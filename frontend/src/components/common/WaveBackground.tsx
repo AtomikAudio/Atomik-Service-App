@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(237, 29, 36, 0.08)',
+    backgroundColor: 'rgba(142, 48, 47, 0.08)',
   },
   dotGrid: {
     position: 'absolute',

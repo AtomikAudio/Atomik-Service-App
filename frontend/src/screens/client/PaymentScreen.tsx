@@ -66,7 +66,7 @@ const razorpayHtml = (key: string, orderId: string, amount: number, name: string
     name: "ATOMIK",
     description: "${escapeJsString(escapeHtml(name))}",
     order_id: "${escapeJsString(orderId)}",
-    theme: { color: "#ed1d24" },
+    theme: { color: "#8e302f" },
     handler: function (response) {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'success',
