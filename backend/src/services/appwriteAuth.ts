@@ -4,7 +4,8 @@ export type OtpPurpose =
   | 'signup'
   | 'login'
   | 'technician_signup'
-  | 'technician_login';
+  | 'technician_login'
+  | 'forgot_password';
 
 export function isAppwriteConfigured(): boolean {
   return !!(

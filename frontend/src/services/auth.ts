@@ -108,7 +108,8 @@ export type OtpPurpose =
   | 'signup'
   | 'login'
   | 'technician_signup'
-  | 'technician_login';
+  | 'technician_login'
+  | 'forgot_password';
 
 export const authService = {
   async login(identifier: string, password: string): Promise<LoginResponse> {
@@ -284,6 +285,21 @@ export const authService = {
       });
     } catch (err) {
       if (!isNetworkError(err)) throw err;
+    }
+  },
+
+  async resetPasswordWithPhone(
+    phone: string,
+    otp: string,
+    password: string
+  ): Promise<void> {
+    const raw = (await api.post('/auth/reset-password-phone', {
+      phone: phone.trim(),
+      otp: otp.trim(),
+      password,
+    })) as { success?: boolean; message?: string };
+    if (!raw?.success) {
+      throw new Error(raw?.message || 'Could not reset password');
     }
   },
 

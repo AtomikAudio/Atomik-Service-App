@@ -80,11 +80,6 @@ export const Button: React.FC<ButtonProps> = ({
     }
   };
 
-  const fillWidth = fillAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
-
   const labelColor = fillAnim.interpolate({
     inputRange: [0, 0.55, 1],
     outputRange: [COLORS.red, COLORS.white, COLORS.white],
@@ -130,7 +125,7 @@ export const Button: React.FC<ButtonProps> = ({
             style={[
               styles.fillLayer,
               {
-                width: fillWidth,
+                opacity: fillAnim,
                 backgroundColor: COLORS.statusConfirmed,
               },
             ]}
@@ -175,6 +170,7 @@ const styles = StyleSheet.create({
   fillLayer: {
     position: 'absolute',
     left: 0,
+    right: 0,
     top: 0,
     bottom: 0,
     borderRadius: 9,

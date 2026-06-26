@@ -147,7 +147,13 @@ export const sendOtpRules = [
     .withMessage('Invalid phone number format'),
   body('purpose')
     .optional()
-    .isIn(['signup', 'login', 'technician_signup', 'technician_login'])
+    .isIn([
+      'signup',
+      'login',
+      'technician_signup',
+      'technician_login',
+      'forgot_password',
+    ])
     .withMessage('Invalid OTP purpose'),
 ];
 
@@ -205,8 +211,30 @@ export const verifyOtpRules = [
     .withMessage('Enter the 6-digit code'),
   body('purpose')
     .optional()
-    .isIn(['signup', 'login', 'technician_signup', 'technician_login'])
+    .isIn([
+      'signup',
+      'login',
+      'technician_signup',
+      'technician_login',
+      'forgot_password',
+    ])
     .withMessage('Invalid OTP purpose'),
+];
+
+export const resetPasswordPhoneRules = [
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Phone is required')
+    .isLength({ max: INPUT_LIMITS.phone })
+    .matches(/^[\d\s+()-]+$/)
+    .withMessage('Invalid phone number format'),
+  body('otp')
+    .trim()
+    .isLength({ min: INPUT_LIMITS.otp, max: INPUT_LIMITS.otp })
+    .isNumeric()
+    .withMessage('Enter the 6-digit code'),
+  passwordRules,
 ];
 
 export const slotAvailabilityQueryRules = [

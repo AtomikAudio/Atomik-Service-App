@@ -375,6 +375,54 @@ export const resetPassword = async (
   }
 };
 
+export const resetPasswordWithPhone = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const phoneRaw = String(req.body.phone ?? '').trim();
+    const otp = String(req.body.otp ?? '').trim();
+    const password = String(req.body.password ?? '');
+
+    if (!phoneRaw || !otp) {
+      res.status(400).json({
+        success: false,
+        message: 'Phone number and verification code are required',
+      });
+      return;
+    }
+
+    const otpCheck = await verifyPhoneOtp(phoneRaw, otp, 'forgot_password');
+    if (!otpCheck.ok) {
+      res.status(otpCheck.status).json({ success: false, message: otpCheck.message });
+      return;
+    }
+
+    const formattedPhone = toE164(phoneRaw);
+    const user = await User.findOne({ phone: formattedPhone }).select('+password');
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'No account found for this phone number',
+      });
+      return;
+    }
+
+    user.password = password;
+    user.phoneVerified = true;
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateProfile = async (
   req: AuthRequest,
   res: Response,

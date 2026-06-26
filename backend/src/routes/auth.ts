@@ -8,6 +8,7 @@ import {
   getMe,
   forgotPassword,
   resetPassword,
+  resetPasswordWithPhone,
   updateFcmToken,
   updateProfile,
   uploadAvatar,
@@ -30,6 +31,7 @@ import {
   phoneLoginRules,
   forgotPasswordRules,
   resetPasswordRules,
+  resetPasswordPhoneRules,
   fcmTokenRules,
   validate,
 } from '../middleware/validators';
@@ -61,6 +63,13 @@ router.post(
   resetPasswordRules,
   validate,
   resetPassword
+);
+router.post(
+  '/reset-password-phone',
+  passwordResetLimiter,
+  resetPasswordPhoneRules,
+  validate,
+  resetPasswordWithPhone
 );
 
 router.get('/me', authenticate, getMe);

@@ -36,7 +36,8 @@ function parsePurpose(raw: unknown): OtpPurpose {
   if (
     value === 'login' ||
     value === 'technician_signup' ||
-    value === 'technician_login'
+    value === 'technician_login' ||
+    value === 'forgot_password'
   ) {
     return value;
   }
@@ -73,7 +74,11 @@ export const sendSignupOtp = async (
       }
     }
 
-    if (purpose === 'login' || purpose === 'technician_login') {
+    if (
+      purpose === 'login' ||
+      purpose === 'technician_login' ||
+      purpose === 'forgot_password'
+    ) {
       if (!existingUser) {
         res.status(404).json({ success: false, message: 'No account found for this phone number' });
         return;
