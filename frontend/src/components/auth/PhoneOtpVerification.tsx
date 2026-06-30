@@ -32,6 +32,7 @@ export const PhoneOtpVerification: React.FC<Props> = ({
   const [resendIn, setResendIn] = useState(0);
   const [localOtpError, setLocalOtpError] = useState('');
   const verifyLock = useRef(false);
+  const sendLock = useRef(false);
 
   const digits = phone.replace(/\D/g, '');
   const phoneReady = digits.length >= 10;
@@ -47,10 +48,15 @@ export const PhoneOtpVerification: React.FC<Props> = ({
     setOtp('');
     setPhoneVerified(false);
     setLocalOtpError('');
+    setResendIn(0);
     verifyLock.current = false;
+    sendLock.current = false;
     onVerifiedChange?.(false);
     onOtpChange?.('');
-  }, [phone, purpose, onVerifiedChange, onOtpChange]);
+    // Reset only when the target phone/purpose changes — not when callback
+    // identities change — so a successful send is never wiped mid-flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, purpose]);
 
   const setVerified = useCallback(
     (value: boolean) => {
@@ -61,25 +67,39 @@ export const PhoneOtpVerification: React.FC<Props> = ({
   );
 
   const handleSendOtp = async () => {
-    if (!phoneReady || phoneVerified) return;
+    // Block invalid, already-verified, in-flight, or cooled-down sends.
+    if (!phoneReady || phoneVerified || sendingOtp || resendIn > 0) return;
+    // Synchronous guard: stops a burst of rapid taps from firing parallel
+    // requests before React re-renders the disabled button.
+    if (sendLock.current) return;
+    sendLock.current = true;
 
     setSendingOtp(true);
     setLocalOtpError('');
     onClearOtpError?.();
-    setVerified(false);
     setOtp('');
     onOtpChange?.('');
+    // Lock the button for 30s the instant the user taps, regardless of how
+    // fast/slow the response is, so it can't be spammed.
+    setResendIn(30);
     try {
       const result = await authService.sendOtp(phone, purpose);
       setOtpSent(true);
-      setResendIn(result.resendAfter);
+      setResendIn(result.resendAfter || 30);
     } catch (err: any) {
       if (typeof err.retryAfter === 'number' && err.retryAfter > 0) {
+        // Backend says an OTP was recently sent — reveal the input so the
+        // user can enter the code that already went out.
         setResendIn(err.retryAfter);
+        setOtpSent(true);
+      } else {
+        // Hard failure (e.g. network / no account) — unlock so they can retry.
+        setResendIn(0);
       }
       setLocalOtpError(err.message || 'Could not send code');
     } finally {
       setSendingOtp(false);
+      sendLock.current = false;
     }
   };
 
@@ -135,10 +155,7 @@ export const PhoneOtpVerification: React.FC<Props> = ({
           loading={sendingOtp && !phoneVerified}
           verified={phoneVerified}
           disabled={
-            !phoneReady ||
-            phoneVerified ||
-            sendingOtp ||
-            (otpSent && resendIn > 0)
+            !phoneReady || phoneVerified || sendingOtp || resendIn > 0
           }
           variant="outline"
           style={styles.otpBtn}
