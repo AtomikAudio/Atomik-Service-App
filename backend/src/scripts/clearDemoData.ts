@@ -9,6 +9,7 @@ import { Review } from '../models/Review';
 import { Technician } from '../models/Technician';
 import { AdminAuditLog } from '../models/AdminAuditLog';
 import { OtpVerification } from '../models/OtpVerification';
+import { SlotHold } from '../models/SlotHold';
 
 const DEMO_EMAILS = [
   'client@atomik.demo',
@@ -22,7 +23,7 @@ export async function clearDemoData(): Promise<void> {
     email: { $in: DEMO_EMAILS.map((e) => e.toLowerCase()) },
   }).select('_id email');
 
-  const [bookings, invoices, notifications, venues, reviews, technicians, audits, otps, otherUsers] =
+  const [bookings, invoices, notifications, venues, reviews, technicians, audits, otps, holds, otherUsers] =
     await Promise.all([
       Booking.deleteMany({}),
       Invoice.deleteMany({}),
@@ -32,6 +33,7 @@ export async function clearDemoData(): Promise<void> {
       Technician.deleteMany({}),
       AdminAuditLog.deleteMany({}),
       OtpVerification.deleteMany({}),
+      SlotHold.deleteMany({}),
       User.deleteMany({
         email: { $nin: DEMO_EMAILS.map((e) => e.toLowerCase()) },
       }),
@@ -45,6 +47,7 @@ export async function clearDemoData(): Promise<void> {
   console.log(`  deleted ${technicians.deletedCount} technician profile(s)`);
   console.log(`  deleted ${audits.deletedCount} audit log(s)`);
   console.log(`  deleted ${otps.deletedCount} OTP record(s)`);
+  console.log(`  deleted ${holds.deletedCount} slot hold(s)`);
   console.log(`  deleted ${otherUsers.deletedCount} non-demo user(s)`);
   console.log(`  kept ${demoUsers.length} demo account(s):`);
   demoUsers.forEach((u) => console.log(`    - ${u.email}`));

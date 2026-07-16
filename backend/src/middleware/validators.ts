@@ -244,7 +244,23 @@ export const slotAvailabilityQueryRules = [
     .withMessage('date query parameter is required')
     .matches(/^\d{4}-\d{2}-\d{2}$/)
     .withMessage('Invalid date (use YYYY-MM-DD)'),
+  query('excludeBookingId')
+    .optional()
+    .isMongoId()
+    .withMessage('Invalid excludeBookingId'),
 ];
+
+const scheduledTimeSlotRule = body('scheduledTime')
+  .trim()
+  .notEmpty()
+  .withMessage('Scheduled time is required')
+  .custom((value) => {
+    const cleaned = String(value).replace(/\s*IST\s*$/i, '').trim();
+    if (!(BOOKING_TIME_SLOTS as readonly string[]).includes(cleaned)) {
+      throw new Error('Invalid time slot');
+    }
+    return true;
+  });
 
 export const holdSlotRules = [
   body('scheduledDate')
@@ -394,6 +410,11 @@ export const createOrderRules = [
     .optional()
     .isIn(['full', 'extra_parts'])
     .withMessage('Invalid payFor value'),
+  body('couponCode')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 32 })
+    .withMessage('Invalid coupon code'),
 ];
 
 export const verifyPaymentRules = [
@@ -414,4 +435,59 @@ export const verifyPaymentRules = [
 
 export const mongoIdParamRules = (paramName = 'id') => [
   param(paramName).isMongoId().withMessage(`Invalid ${paramName}`),
+];
+
+export const rescheduleProposeRules = [
+  ...mongoIdParamRules('id'),
+  body('scheduledDate')
+    .trim()
+    .notEmpty()
+    .withMessage('Scheduled date is required')
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('Invalid scheduled date (use YYYY-MM-DD)'),
+  scheduledTimeSlotRule,
+  body('note')
+    .optional()
+    .isString()
+    .isLength({ max: INPUT_LIMITS.notes })
+    .withMessage('Note is too long'),
+];
+
+export const rescheduleRespondRules = [
+  ...mongoIdParamRules('id'),
+  body('action')
+    .trim()
+    .notEmpty()
+    .withMessage('action is required')
+    .isIn(['accept', 'counter'])
+    .withMessage('action must be accept or counter'),
+  body('scheduledDate')
+    .optional()
+    .trim()
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('Invalid scheduled date (use YYYY-MM-DD)'),
+  body('scheduledTime')
+    .optional()
+    .trim()
+    .custom((value, { req }) => {
+      if (req.body.action !== 'counter') return true;
+      if (!value) throw new Error('Scheduled time is required to counter-propose');
+      const cleaned = String(value).replace(/\s*IST\s*$/i, '').trim();
+      if (!(BOOKING_TIME_SLOTS as readonly string[]).includes(cleaned)) {
+        throw new Error('Invalid time slot');
+      }
+      return true;
+    }),
+  body('note')
+    .optional()
+    .isString()
+    .isLength({ max: INPUT_LIMITS.notes })
+    .withMessage('Note is too long'),
+  body().custom((_, { req }) => {
+    if (req.body.action !== 'counter') return true;
+    if (!req.body.scheduledDate?.trim()) {
+      throw new Error('scheduledDate is required to counter-propose');
+    }
+    return true;
+  }),
 ];

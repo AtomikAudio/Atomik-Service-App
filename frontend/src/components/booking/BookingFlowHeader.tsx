@@ -22,6 +22,29 @@ export const BookingFlowHeader: React.FC<Props> = ({
 }) => {
   const { headerTopPadding } = useLayoutInsets();
 
+  const rightSlot = () => {
+    if (!rightLabel) return <View style={styles.spacer} />;
+    if (onRight) {
+      return (
+        <TouchableOpacity onPress={onRight} disabled={rightDisabled}>
+          <Text
+            style={[
+              styles.right,
+              rightDisabled && styles.rightDisabled,
+            ]}
+          >
+            {rightLabel}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <Text style={styles.rightStatic} numberOfLines={1}>
+        {rightLabel}
+      </Text>
+    );
+  };
+
   return (
     <View style={styles.wrap}>
       <View style={[styles.bar, { paddingTop: headerTopPadding + 8 }]}>
@@ -31,20 +54,7 @@ export const BookingFlowHeader: React.FC<Props> = ({
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
-        {rightLabel && onRight ? (
-          <TouchableOpacity onPress={onRight} disabled={rightDisabled}>
-            <Text
-              style={[
-                styles.right,
-                rightDisabled && styles.rightDisabled,
-              ]}
-            >
-              {rightLabel}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.spacer} />
-        )}
+        {rightSlot()}
       </View>
       <SlotHoldBadge />
     </View>
@@ -76,7 +86,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
     color: COLORS.red,
-    width: 56,
+    minWidth: 40,
+    maxWidth: 72,
+    textAlign: 'right',
+  },
+  rightStatic: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 12,
+    color: COLORS.gray,
+    minWidth: 40,
+    maxWidth: 100,
     textAlign: 'right',
   },
   rightDisabled: { color: COLORS.grayDark },

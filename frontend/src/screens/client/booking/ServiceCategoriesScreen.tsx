@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,29 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import {
   EXTRA_PARTS_CHARGE_NOTE,
   SERVICE_GROUPS,
 } from '../../../constants/audioServices';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
+import { bookingService, Booking } from '../../../services/bookings';
+import {
+  formatServiceTypeLabel,
+  getTechnicianFromBooking,
+} from '../../../utils/bookingDisplay';
+import { formatBookingSchedule } from '../../../utils/schedule';
 import { COLORS } from '../../../constants/colors';
 
 interface Props {
   navigation: any;
   route?: { params?: { preselect?: string; reset?: boolean } };
+}
+
+function bookingSortKey(b: Booking): number {
+  const d = new Date(b.scheduledDate).getTime();
+  return Number.isFinite(d) ? d : Number.MAX_SAFE_INTEGER;
 }
 
 export const ServiceCategoriesScreen: React.FC<Props> = ({
@@ -26,6 +38,8 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
 }) => {
   const { addCategory, resetDraft } = useBookingDraft();
   const preselect = route?.params?.preselect;
+  const [upcomingOpen, setUpcomingOpen] = useState(false);
+  const [latestUpcoming, setLatestUpcoming] = useState<Booking | null>(null);
 
   useEffect(() => {
     if (route?.params?.reset) resetDraft();
@@ -38,6 +52,24 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loadLatestUpcoming = useCallback(async () => {
+    try {
+      const bookings = await bookingService.getMyBookings({ limit: 20 });
+      const upcoming = bookings
+        .filter((b) => !['completed', 'cancelled'].includes(b.status))
+        .sort((a, b) => bookingSortKey(a) - bookingSortKey(b));
+      setLatestUpcoming(upcoming[0] ?? null);
+    } catch {
+      setLatestUpcoming(null);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadLatestUpcoming();
+    }, [loadLatestUpcoming])
+  );
+
   const onSelectGroup = (groupId: string, hasSubmenu: boolean) => {
     if (hasSubmenu) {
       navigation.navigate('ServiceSubcategories');
@@ -46,6 +78,10 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
       navigation.navigate('PlaceOrder');
     }
   };
+
+  const tech = latestUpcoming
+    ? getTechnicianFromBooking(latestUpcoming)
+    : null;
 
   return (
     <View style={styles.container}>
@@ -57,7 +93,7 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.hint}>Select a service type for your booking.</Text>
+        <Text style={styles.sectionTitle}>Book a service</Text>
 
         {SERVICE_GROUPS.map((group) => (
           <TouchableOpacity
@@ -90,6 +126,55 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
           </TouchableOpacity>
         ))}
 
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => setUpcomingOpen((o) => !o)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.sectionTitleInline}>Upcoming service</Text>
+          <Ionicons
+            name={upcomingOpen ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={COLORS.gray}
+          />
+        </TouchableOpacity>
+
+        {upcomingOpen ? (
+          latestUpcoming ? (
+            <TouchableOpacity
+              style={styles.upcomingCard}
+              onPress={() =>
+                navigation.navigate('TrackService', { id: latestUpcoming._id })
+              }
+              activeOpacity={0.88}
+            >
+              <Text style={styles.upcomingType}>
+                {formatServiceTypeLabel(latestUpcoming.serviceType)}
+              </Text>
+              <Text style={styles.upcomingMeta}>
+                {latestUpcoming.venueId?.name ?? 'Venue'}
+              </Text>
+              <Text style={styles.upcomingMeta}>
+                {formatBookingSchedule(
+                  latestUpcoming.scheduledDate,
+                  latestUpcoming.scheduledTime
+                )}
+              </Text>
+              {tech ? (
+                <Text style={styles.upcomingTech}>{tech.name}</Text>
+              ) : (
+                <Text style={styles.upcomingTechMuted}>Awaiting technician</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.upcomingEmpty}>
+              <Text style={styles.upcomingEmptyText}>
+                No upcoming services. Book one above.
+              </Text>
+            </View>
+          )
+        ) : null}
+
         <View style={styles.chargeNote}>
           <Ionicons
             name="information-circle-outline"
@@ -107,13 +192,16 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scroll: { padding: 20, paddingBottom: 40, gap: 14 },
-  hint: {
-    fontFamily: 'SpaceMono_400Regular',
-    fontSize: 10,
-    color: COLORS.gray,
-    letterSpacing: 0.3,
-    marginBottom: 8,
-    lineHeight: 15,
+  sectionTitle: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 14,
+    color: COLORS.white,
+    marginBottom: 4,
+  },
+  sectionTitleInline: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 14,
+    color: COLORS.white,
   },
   card: {
     flexDirection: 'row',
@@ -154,6 +242,55 @@ const styles = StyleSheet.create({
     color: COLORS.grayDark,
     marginTop: 8,
     letterSpacing: 0.5,
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingVertical: 8,
+  },
+  upcomingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+  },
+  upcomingType: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 15,
+    color: COLORS.white,
+  },
+  upcomingMeta: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 6,
+  },
+  upcomingTech: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 12,
+    color: COLORS.grayLight,
+    marginTop: 10,
+  },
+  upcomingTechMuted: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.grayDark,
+    marginTop: 10,
+  },
+  upcomingEmpty: {
+    padding: 16,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  upcomingEmptyText: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
   },
   chargeNote: {
     flexDirection: 'row',

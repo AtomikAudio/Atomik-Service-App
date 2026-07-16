@@ -44,7 +44,9 @@ export async function settleInvoicePayment(
   }
 
   const previousPaid = existing.amountPaid ?? 0;
-  const paidNow = existing.totalAmount - previousPaid;
+  const discountAmount = Math.max(0, existing.discountAmount ?? 0);
+  const remaining = Math.max(0, existing.totalAmount - previousPaid);
+  const paidNow = Math.max(0, Math.round((remaining - discountAmount) * 100) / 100);
   const paidAt = new Date();
   const paymentType =
     previousPaid > 0
@@ -53,6 +55,10 @@ export async function settleInvoicePayment(
         ? 'full'
         : 'base_service';
   const isExtraPartsPayment = paymentType === 'extra_parts';
+  const couponNote =
+    existing.couponCode && discountAmount > 0
+      ? ` (coupon ${existing.couponCode} −₹${discountAmount.toLocaleString('en-IN')})`
+      : '';
 
   const invoice = await Invoice.findByIdAndUpdate(
     existing._id,
@@ -105,7 +111,7 @@ export async function settleInvoicePayment(
       timestamp: new Date(),
       notes: isExtraPartsPayment
         ? undefined
-        : `Payment received — ₹${paidNow.toLocaleString('en-IN')}`,
+        : `Payment received — ₹${paidNow.toLocaleString('en-IN')}${couponNote}`,
       updatedBy,
     };
 
@@ -126,7 +132,7 @@ export async function settleInvoicePayment(
   await Notification.create({
     userId: notifyUserId,
     title: 'Payment Successful',
-    body: `Payment of ₹${paidNow.toLocaleString('en-IN')} for invoice ${invoice.invoiceNumber} confirmed.`,
+    body: `Payment of ₹${paidNow.toLocaleString('en-IN')} for invoice ${invoice.invoiceNumber} confirmed${couponNote}.`,
     type: 'success',
     category: 'payment',
   });

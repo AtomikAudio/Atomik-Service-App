@@ -25,8 +25,8 @@ export const SparePartsSummary: React.FC<Props> = ({
   const totalWithGst = total + gstAmount;
 
   return (
-    <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      <Text style={styles.title}>{title}</Text>
+    <View style={[styles.wrap, compact && styles.wrapCompact, !title && styles.wrapNoTitle]}>
+      {title ? <Text style={styles.title}>{title}</Text> : null}
       {parts.map((p, i) => (
         <View key={`${p.name}-${i}`} style={styles.row}>
           <Text style={styles.name} numberOfLines={2}>
@@ -69,6 +69,11 @@ const styles = StyleSheet.create({
   wrapCompact: {
     marginTop: 8,
     paddingTop: 8,
+  },
+  wrapNoTitle: {
+    marginTop: 0,
+    paddingTop: 0,
+    borderTopWidth: 0,
   },
   title: {
     fontFamily: 'Montserrat_600SemiBold',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { EditProfileScreen } from '../screens/client/account/EditProfileScreen';
 import { SavedVenuesScreen } from '../screens/client/account/SavedVenuesScreen';
+import { AddAddressScreen } from '../screens/client/account/AddAddressScreen';
 import { NotificationSettingsScreen } from '../screens/client/account/NotificationSettingsScreen';
 import { SecurityScreen } from '../screens/client/account/SecurityScreen';
 import { HelpSupportScreen } from '../screens/client/account/HelpSupportScreen';
@@ -12,6 +13,7 @@ import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 export const PROFILE_SCREEN_NAMES = [
   'EditProfile',
   'SavedVenues',
+  'AddAddress',
   'NotificationSettings',
   'Security',
   'HelpSupport',
@@ -28,6 +30,7 @@ export const profileScreenComponents: Record<
 > = {
   EditProfile: EditProfileScreen,
   SavedVenues: SavedVenuesScreen,
+  AddAddress: AddAddressScreen,
   NotificationSettings: NotificationSettingsScreen,
   Security: SecurityScreen,
   HelpSupport: HelpSupportScreen,

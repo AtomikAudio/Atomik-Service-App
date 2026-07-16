@@ -12,6 +12,7 @@ import {
   updateFcmToken,
   updateProfile,
   uploadAvatar,
+  deleteAccount,
 } from '../controllers/authController';
 import { avatarUpload } from '../middleware/uploadAvatar';
 import { sendSignupOtp, confirmPhoneOtp } from '../controllers/otpController';
@@ -98,5 +99,6 @@ router.post(
   uploadAvatar
 );
 router.patch('/fcm-token', authenticate, fcmTokenRules, validate, updateFcmToken);
+router.delete('/account', authenticate, deleteAccount);
 
 export default router;

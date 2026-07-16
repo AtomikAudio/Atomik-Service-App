@@ -28,6 +28,10 @@ export interface IInvoice extends Document {
   paymentId?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  /** Applied promo coupon for the pending / settled charge */
+  couponCode?: string;
+  discountPercent?: number;
+  discountAmount?: number;
   paymentHistory: IInvoicePaymentEntry[];
 }
 
@@ -53,6 +57,9 @@ const invoiceSchema = new Schema<IInvoice>(
     paymentId: String,
     razorpayOrderId: String,
     razorpayPaymentId: String,
+    couponCode: String,
+    discountPercent: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
     paymentHistory: [
       {
         amount: { type: Number, required: true },

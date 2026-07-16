@@ -39,6 +39,11 @@ const TechTabs = () => {
             <Ionicons name="briefcase-outline" size={size} color={color} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate('Jobs', { screen: 'TechDashboard' });
+          },
+        })}
       />
       <Tab.Screen
         name="Alerts"

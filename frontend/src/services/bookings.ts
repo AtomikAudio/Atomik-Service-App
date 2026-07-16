@@ -18,6 +18,22 @@ export interface BookingInvoice {
   razorpayPaymentId?: string;
 }
 
+export interface BookingReschedule {
+  status: 'pending_client' | 'pending_technician';
+  proposedDate: string;
+  proposedTime: string;
+  proposedBy: 'technician' | 'client';
+  note?: string;
+  updatedAt?: string;
+  history?: {
+    proposedDate: string;
+    proposedTime: string;
+    proposedBy: 'technician' | 'client';
+    note?: string;
+    at: string;
+  }[];
+}
+
 export interface Booking {
   _id: string;
   bookingId: string;
@@ -48,16 +64,23 @@ export interface Booking {
   technicianNotes?: string;
   spareParts?: { name: string; quantity: number; unitCost: number }[];
   rejectedBy?: (string | { _id: string })[];
+  reschedule?: BookingReschedule;
 }
 
 export const bookingService = {
-  async getSlotAvailability(date: string): Promise<{
+  async getSlotAvailability(
+    date: string,
+    excludeBookingId?: string
+  ): Promise<{
     date: string;
     slots: SlotAvailabilityItem[];
     myHold: SlotHoldInfo | null;
   }> {
     const res = (await api.get('/bookings/slots/availability', {
-      params: { date },
+      params: {
+        date,
+        ...(excludeBookingId ? { excludeBookingId } : {}),
+      },
     })) as {
       date: string;
       slots: SlotAvailabilityItem[];
@@ -166,5 +189,32 @@ export const bookingService = {
       notes,
       ...extra,
     });
+  },
+
+  async proposeReschedule(
+    bookingId: string,
+    payload: { scheduledDate: string; scheduledTime: string; note?: string }
+  ) {
+    const res = (await api.post(`/bookings/${bookingId}/reschedule/propose`, payload)) as {
+      booking: Booking;
+      message?: string;
+    };
+    return res.booking;
+  },
+
+  async respondToReschedule(
+    bookingId: string,
+    payload: {
+      action: 'accept' | 'counter';
+      scheduledDate?: string;
+      scheduledTime?: string;
+      note?: string;
+    }
+  ) {
+    const res = (await api.post(`/bookings/${bookingId}/reschedule/respond`, payload)) as {
+      booking: Booking;
+      message?: string;
+    };
+    return res.booking;
   },
 };

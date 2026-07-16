@@ -72,6 +72,7 @@ export function createApp(): express.Application {
     res.json({ status: 'ok', service: 'ATOMIK API', timestamp: new Date().toISOString() });
   });
 
+  
   app.use('/api', globalApiLimiter);
   app.use('/api/auth', authRoutes);
   app.use('/api/bookings', bookingRoutes);

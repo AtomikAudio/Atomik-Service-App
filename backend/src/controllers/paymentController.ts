@@ -19,7 +19,13 @@ import {
   ensureInvoiceReflectsBookingSpareParts,
   buildPaymentHistoryForClient,
 } from '../utils/bookingPayment';
+import { applyCouponToAmount, resolveCoupon } from '../utils/coupons';
 import { RazorpayWebhookRequest } from '../middleware/razorpayWebhook';
+// ₹1 dev test payment — disabled; re-enable with route in routes/payments.ts
+// import {
+//   ensureDevTestInvoice,
+//   isDevTestPaymentAllowed,
+// } from '../services/devTestPayment';
 
 export const createPaymentOrder = async (
   req: AuthRequest,
@@ -32,9 +38,10 @@ export const createPaymentOrder = async (
       return;
     }
 
-    const { invoiceId, payFor } = req.body as {
+    const { invoiceId, payFor, couponCode } = req.body as {
       invoiceId: string;
       payFor?: 'full' | 'extra_parts';
+      couponCode?: string;
     };
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) {
@@ -59,7 +66,7 @@ export const createPaymentOrder = async (
     }
 
     const extraCharge = getExtraPartsChargeAmount(invoice, spareLines);
-    const chargeAmount =
+    let chargeAmount =
       payFor === 'extra_parts' ? extraCharge : balanceDue;
 
     if (payFor === 'extra_parts') {
@@ -78,9 +85,59 @@ export const createPaymentOrder = async (
       return;
     }
 
+    let couponPayload: {
+      couponCode: string;
+      discountPercent: number;
+      discountAmount: number;
+      originalAmount: number;
+      label: string;
+    } | null = null;
+
+    const trimmedCoupon = String(couponCode ?? '').trim();
+    if (trimmedCoupon) {
+      if (!resolveCoupon(trimmedCoupon)) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid coupon code',
+        });
+        return;
+      }
+      const applied = applyCouponToAmount(chargeAmount, trimmedCoupon);
+      if (!applied || applied.chargeAmount <= 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Coupon could not be applied to this amount',
+        });
+        return;
+      }
+      couponPayload = {
+        couponCode: applied.couponCode,
+        discountPercent: applied.discountPercent,
+        discountAmount: applied.discountAmount,
+        originalAmount: applied.originalAmount,
+        label: applied.label,
+      };
+      chargeAmount = applied.chargeAmount;
+    }
+
     const respondDemoOrder = async (note: string) => {
       const demo = createDemoPaymentIds(String(invoice._id));
-      await Invoice.findByIdAndUpdate(invoiceId, { razorpayOrderId: demo.orderId });
+      await Invoice.findByIdAndUpdate(invoiceId, {
+        razorpayOrderId: demo.orderId,
+        ...(couponPayload
+          ? {
+              couponCode: couponPayload.couponCode,
+              discountPercent: couponPayload.discountPercent,
+              discountAmount: couponPayload.discountAmount,
+            }
+          : {
+              $unset: {
+                couponCode: 1,
+                discountPercent: 1,
+                discountAmount: 1,
+              },
+            }),
+      });
 
       res.status(200).json({
         success: true,
@@ -97,6 +154,7 @@ export const createPaymentOrder = async (
           balanceDue: chargeAmount,
           spareParts: invoice.spareParts ?? 0,
         },
+        coupon: couponPayload,
         key: 'demo',
         demoPayment: demo,
       });
@@ -112,7 +170,23 @@ export const createPaymentOrder = async (
     try {
       const order = await createOrder(chargeAmount, 'INR', invoice.invoiceNumber);
 
-      await Invoice.findByIdAndUpdate(invoiceId, { razorpayOrderId: order.id });
+      if (couponPayload) {
+        await Invoice.findByIdAndUpdate(invoiceId, {
+          razorpayOrderId: order.id,
+          couponCode: couponPayload.couponCode,
+          discountPercent: couponPayload.discountPercent,
+          discountAmount: couponPayload.discountAmount,
+        });
+      } else {
+        await Invoice.findByIdAndUpdate(invoiceId, {
+          razorpayOrderId: order.id,
+          $unset: {
+            couponCode: 1,
+            discountPercent: 1,
+            discountAmount: 1,
+          },
+        });
+      }
 
       res.status(200).json({
         success: true,
@@ -128,6 +202,7 @@ export const createPaymentOrder = async (
           balanceDue: chargeAmount,
           spareParts: invoice.spareParts ?? 0,
         },
+        coupon: couponPayload,
         key: process.env.RAZORPAY_KEY_ID,
       });
     } catch (err) {
@@ -146,6 +221,60 @@ export const createPaymentOrder = async (
     next(err);
   }
 };
+
+// ₹1 dev test payment — disabled. Re-enable with routes/payments.ts + DevTestPaymentCard on Home.
+/*
+export const createDevTestPaymentOrder = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!isDevTestPaymentAllowed()) {
+      res.status(404).json({ success: false, message: 'Not found' });
+      return;
+    }
+
+    if (!isRazorpayConfigured()) {
+      res.status(503).json({
+        success: false,
+        message: 'Razorpay keys not configured on the server',
+      });
+      return;
+    }
+
+    const { invoice, booking } = await ensureDevTestInvoice(req.user!.id);
+    const chargeAmount = getInvoiceBalanceDue(invoice);
+    if (chargeAmount <= 0) {
+      res.status(400).json({ success: false, message: 'Dev test invoice already paid' });
+      return;
+    }
+
+    const order = await createOrder(chargeAmount, 'INR', invoice.invoiceNumber);
+    await Invoice.findByIdAndUpdate(invoice._id, { razorpayOrderId: order.id });
+
+    res.status(200).json({
+      success: true,
+      devTest: true,
+      invoiceId: String(invoice._id),
+      bookingId: String(booking._id),
+      order: {
+        id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      },
+      invoice: {
+        invoiceNumber: invoice.invoiceNumber,
+        totalAmount: invoice.totalAmount,
+        balanceDue: chargeAmount,
+      },
+      key: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+*/
 
 export const verifyPayment = async (
   req: AuthRequest,
@@ -270,8 +399,12 @@ export const razorpayWebhook = async (
         existing,
         spareBooking?.spareParts as { name?: string; quantity?: number; unitCost?: number }[]
       );
-      const expectedAmount =
+      let expectedAmount =
         extraCharge > 0 && extraCharge < balanceDue ? extraCharge : balanceDue;
+      if (existing.couponCode) {
+        const applied = applyCouponToAmount(expectedAmount, existing.couponCode);
+        if (applied) expectedAmount = applied.chargeAmount;
+      }
       const expectedPaise = Math.round(expectedAmount * 100);
       if (payment.amount !== expectedPaise) {
         console.error(

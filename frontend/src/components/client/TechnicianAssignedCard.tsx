@@ -2,18 +2,20 @@ import React from 'react';
 import { View, Text, StyleSheet, Linking, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../common/Card';
+import { Button } from '../common/Button';
 import { COLORS } from '../../constants/colors';
 
 interface Props {
   name: string;
   phone?: string;
-  statusLabel?: string;
+  /** When true, show a primary CALL button instead of only the phone row. */
+  showCallButton?: boolean;
 }
 
 export const TechnicianAssignedCard: React.FC<Props> = ({
   name,
   phone,
-  statusLabel,
+  showCallButton = false,
 }) => {
   const callTech = () => {
     if (!phone) return;
@@ -29,17 +31,22 @@ export const TechnicianAssignedCard: React.FC<Props> = ({
         </View>
         <View style={styles.headerText}>
           <Text style={styles.title}>Your technician</Text>
-          {statusLabel ? (
-            <Text style={styles.status}>{statusLabel}</Text>
-          ) : null}
         </View>
       </View>
       <Text style={styles.name}>{name}</Text>
       {phone ? (
-        <TouchableOpacity style={styles.phoneRow} onPress={callTech}>
-          <Ionicons name="call-outline" size={16} color={COLORS.red} />
-          <Text style={styles.phone}>{phone}</Text>
-        </TouchableOpacity>
+        showCallButton ? (
+          <Button
+            label="CALL"
+            onPress={callTech}
+            style={styles.callBtn}
+          />
+        ) : (
+          <TouchableOpacity style={styles.phoneRow} onPress={callTech}>
+            <Ionicons name="call-outline" size={16} color={COLORS.red} />
+            <Text style={styles.phone}>{phone}</Text>
+          </TouchableOpacity>
+        )
       ) : (
         <Text style={styles.muted}>Contact details not available</Text>
       )}
@@ -74,13 +81,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.white,
   },
-  status: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
-    color: COLORS.gray,
-    marginTop: 2,
-    textTransform: 'capitalize',
-  },
   name: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 16,
@@ -96,6 +96,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_500Medium',
     fontSize: 14,
     color: COLORS.red,
+  },
+  callBtn: {
+    marginTop: 4,
   },
   muted: {
     fontFamily: 'Montserrat_400Regular',

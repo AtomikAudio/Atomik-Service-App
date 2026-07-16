@@ -18,6 +18,7 @@ import { LoadingView } from '../../components/common/LoadingView';
 import { bookingService, Booking } from '../../services/bookings';
 import { authService, AuthUser } from '../../services/auth';
 import { MasterJobAssignPanel } from '../../components/technician/MasterJobAssignPanel';
+import { RescheduleSlotPicker } from '../../components/client/RescheduleSlotPicker';
 import { COLORS } from '../../constants/colors';
 import { isDeclinedByTechnician } from '../../utils/technicianBooking';
 import {
@@ -101,6 +102,10 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [technicians, setTechnicians] = useState<AuthUser[]>([]);
+  const [showReschedulePicker, setShowReschedulePicker] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<string | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState('');
+  const [rescheduleNote, setRescheduleNote] = useState('');
 
   const isMaster = user?.role === 'master_technician';
 
@@ -215,6 +220,72 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const proposeReschedule = async () => {
+    if (!rescheduleDate || !rescheduleTime) {
+      Alert.alert('Select date and time', 'Pick a new date and slot before proposing.');
+      return;
+    }
+    setActing(true);
+    try {
+      const updated = await bookingService.proposeReschedule(jobId, {
+        scheduledDate: rescheduleDate,
+        scheduledTime: rescheduleTime,
+        note: rescheduleNote.trim() || undefined,
+      });
+      setBooking(updated);
+      setShowReschedulePicker(false);
+      setRescheduleDate(null);
+      setRescheduleTime('');
+      setRescheduleNote('');
+      Alert.alert('Sent', 'Client will be notified of the proposed time.');
+    } catch (e: any) {
+      Alert.alert('Failed', e.message);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const acceptReschedule = async () => {
+    setActing(true);
+    try {
+      const updated = await bookingService.respondToReschedule(jobId, {
+        action: 'accept',
+      });
+      setBooking(updated);
+      Alert.alert('Confirmed', 'Service schedule updated.');
+    } catch (e: any) {
+      Alert.alert('Failed', e.message);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const counterReschedule = async () => {
+    if (!rescheduleDate || !rescheduleTime) {
+      Alert.alert('Select date and time', 'Pick a new date and slot before proposing.');
+      return;
+    }
+    setActing(true);
+    try {
+      const updated = await bookingService.respondToReschedule(jobId, {
+        action: 'counter',
+        scheduledDate: rescheduleDate,
+        scheduledTime: rescheduleTime,
+        note: rescheduleNote.trim() || undefined,
+      });
+      setBooking(updated);
+      setShowReschedulePicker(false);
+      setRescheduleDate(null);
+      setRescheduleTime('');
+      setRescheduleNote('');
+      Alert.alert('Sent', 'Client will be notified of the new proposed time.');
+    } catch (e: any) {
+      Alert.alert('Failed', e.message);
+    } finally {
+      setActing(false);
+    }
+  };
+
   if (loading) return <LoadingView />;
   if (!booking) return null;
 
@@ -232,6 +303,22 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     isAssignedToMe &&
     !isMasterAssigned &&
     !['completed', 'cancelled'].includes(booking.status);
+  const masterAssignerId =
+    masterAssigner && typeof masterAssigner === 'object'
+      ? masterAssigner._id != null
+        ? String(masterAssigner._id)
+        : null
+      : masterAssigner != null
+        ? String(masterAssigner)
+        : null;
+  const canManageReschedule =
+    !['completed', 'cancelled'].includes(booking.status) &&
+    Boolean(assignedTechId) &&
+    (isAssignedToMe || (isMaster && masterAssignerId === String(user?.id ?? '')));
+  const pendingClientReschedule =
+    booking.reschedule?.status === 'pending_client';
+  const pendingTechnicianReschedule =
+    booking.reschedule?.status === 'pending_technician';
   const isDeclinedByMe =
     isUnassigned && isDeclinedByTechnician(booking, user?.id);
   const services = parseServices(booking.notes);
@@ -377,8 +464,128 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     </View>
   );
 
+  const renderRescheduleSection = () => {
+    if (!canManageReschedule) return null;
+    return (
+      <>
+        <Text style={styles.blockLabel}>Reschedule job</Text>
+        <Card padding={16}>
+          <DetailRow
+            label="Current schedule"
+            value={formatBookingSchedule(
+              booking.scheduledDate,
+              booking.scheduledTime
+            )}
+          />
+          {booking.reschedule ? (
+            <DetailRow
+              label={
+                pendingTechnicianReschedule ? 'Client proposed' : 'Your proposal'
+              }
+              value={formatBookingSchedule(
+                booking.reschedule.proposedDate,
+                booking.reschedule.proposedTime
+              )}
+            />
+          ) : null}
+
+          {pendingTechnicianReschedule ? (
+            <>
+              <Text style={styles.rescheduleHint}>
+                Client suggested a new time. Accept it or propose a different slot.
+              </Text>
+              {booking.reschedule?.note ? (
+                <Text style={styles.rescheduleNote}>
+                  "{booking.reschedule.note}"
+                </Text>
+              ) : null}
+              {!showReschedulePicker ? (
+                <View style={styles.rescheduleActions}>
+                  <Button
+                    label="ACCEPT CLIENT TIME"
+                    onPress={acceptReschedule}
+                    loading={acting}
+                  />
+                  <Button
+                    label="PROPOSE DIFFERENT TIME"
+                    variant="outline"
+                    onPress={() => setShowReschedulePicker(true)}
+                    disabled={acting}
+                    style={styles.rescheduleSecondaryBtn}
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : pendingClientReschedule ? (
+            <Text style={styles.rescheduleHint}>
+              Waiting for client to accept your proposed time of{' '}
+              {formatBookingSchedule(
+                booking.reschedule!.proposedDate,
+                booking.reschedule!.proposedTime
+              )}
+              .
+            </Text>
+          ) : !showReschedulePicker ? (
+            <Button
+              label="RESCHEDULE JOB"
+              variant="outline"
+              onPress={() => setShowReschedulePicker(true)}
+              disabled={acting}
+            />
+          ) : null}
+
+          {showReschedulePicker ? (
+            <View style={styles.reschedulePicker}>
+              <RescheduleSlotPicker
+                bookingId={booking._id}
+                serviceType={booking.serviceType}
+                selectedDate={rescheduleDate}
+                selectedTime={rescheduleTime}
+                onSelectDate={setRescheduleDate}
+                onSelectTime={setRescheduleTime}
+              />
+              <Input
+                label="Note (optional)"
+                value={rescheduleNote}
+                onChangeText={setRescheduleNote}
+                placeholder="Reason for reschedule..."
+                multiline
+              />
+              <Button
+                label={
+                  pendingTechnicianReschedule
+                    ? 'SEND COUNTER-PROPOSAL'
+                    : 'SEND PROPOSAL'
+                }
+                onPress={
+                  pendingTechnicianReschedule
+                    ? counterReschedule
+                    : proposeReschedule
+                }
+                loading={acting}
+              />
+              <Button
+                label="CANCEL"
+                variant="ghost"
+                onPress={() => {
+                  setShowReschedulePicker(false);
+                  setRescheduleDate(null);
+                  setRescheduleTime('');
+                  setRescheduleNote('');
+                }}
+                disabled={acting}
+              />
+            </View>
+          ) : null}
+        </Card>
+      </>
+    );
+  };
+
   const renderUpdateTab = () => (
     <View style={styles.tabPanel}>
+      {renderRescheduleSection()}
+
       <Text style={styles.blockLabel}>Job status</Text>
       <View style={styles.statusGrid}>
         {STATUS_OPTIONS.map((s) => (
@@ -854,4 +1061,21 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   dropBtnGhost: { marginBottom: 24 },
+  rescheduleHint: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  rescheduleNote: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.grayLight,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  rescheduleActions: { gap: 10 },
+  rescheduleSecondaryBtn: { marginTop: 4 },
+  reschedulePicker: { marginTop: 8, gap: 10 },
 });

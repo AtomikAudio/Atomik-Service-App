@@ -10,6 +10,27 @@ export type BookingStatus =
   | 'completed'
   | 'cancelled';
 
+export type RescheduleParty = 'technician' | 'client';
+export type RescheduleStatus = 'pending_client' | 'pending_technician';
+
+export interface IRescheduleHistoryEntry {
+  proposedDate: Date;
+  proposedTime: string;
+  proposedBy: RescheduleParty;
+  note?: string;
+  at: Date;
+}
+
+export interface IBookingReschedule {
+  status: RescheduleStatus;
+  proposedDate: Date;
+  proposedTime: string;
+  proposedBy: RescheduleParty;
+  note?: string;
+  updatedAt: Date;
+  history: IRescheduleHistoryEntry[];
+}
+
 export interface IBooking extends Document {
   bookingId: string;
   clientId: mongoose.Types.ObjectId;
@@ -42,6 +63,7 @@ export interface IBooking extends Document {
   cancelledAt?: Date;
   cancellationReason?: string;
   invoiceId?: mongoose.Types.ObjectId;
+  reschedule?: IBookingReschedule;
 }
 
 const bookingSchema = new Schema<IBooking>(
@@ -94,6 +116,23 @@ const bookingSchema = new Schema<IBooking>(
     cancelledAt: Date,
     cancellationReason: String,
     invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
+    reschedule: {
+      status: { type: String, enum: ['pending_client', 'pending_technician'] },
+      proposedDate: Date,
+      proposedTime: String,
+      proposedBy: { type: String, enum: ['technician', 'client'] },
+      note: String,
+      updatedAt: Date,
+      history: [
+        {
+          proposedDate: Date,
+          proposedTime: String,
+          proposedBy: { type: String, enum: ['technician', 'client'] },
+          note: String,
+          at: { type: Date, default: Date.now },
+        },
+      ],
+    },
   },
   { timestamps: true }
 );

@@ -92,6 +92,33 @@ export function buildTrackingTimeline(booking: Booking): TrackingTimelineEvent[]
       notes: timelineNotesForStatus(h.status, h.notes),
     }));
 
+  for (const entry of booking.reschedule?.history ?? []) {
+    const who = entry.proposedBy === 'client' ? 'You proposed' : 'Technician proposed';
+    const when = entry.at ?? booking.reschedule?.updatedAt ?? new Date().toISOString();
+    const displayTime = entry.proposedTime.replace(/\s*IST\s*$/i, '').trim();
+    const dateLabel = formatBookingSchedule(entry.proposedDate, displayTime);
+    events.push({
+      id: `reschedule-${when}-${entry.proposedBy}`,
+      status: 'reschedule_proposed',
+      label: `${who}: ${dateLabel}`,
+      timestamp: when,
+      notes: entry.note?.trim() || undefined,
+    });
+  }
+
+  const confirmedNote = raw.find((h) =>
+    h.notes?.toLowerCase().includes('reschedule confirmed')
+  );
+  if (confirmedNote) {
+    events.push({
+      id: `reschedule-confirmed-${confirmedNote.timestamp}`,
+      status: 'reschedule_confirmed',
+      label: 'Reschedule confirmed',
+      timestamp: confirmedNote.timestamp,
+      notes: confirmedNote.notes,
+    });
+  }
+
   let sorted = [...events].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );

@@ -307,6 +307,17 @@ export const authService = {
     await clearToken();
   },
 
+  async deleteAccount(): Promise<void> {
+    const raw = (await api.delete('/auth/account')) as {
+      success?: boolean;
+      message?: string;
+    };
+    if (!raw?.success) {
+      throw new Error(raw?.message || 'Could not delete account');
+    }
+    await clearToken();
+  },
+
   async updateProfile(payload: { name?: string; phone?: string; avatar?: string }) {
     const raw = (await api.patch('/auth/profile', payload)) as {
       user?: ApiAuthPayload['user'];

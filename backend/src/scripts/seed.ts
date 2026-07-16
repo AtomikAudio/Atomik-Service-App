@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Booking } from '../models/Booking';
@@ -6,6 +7,9 @@ import { Invoice } from '../models/Invoice';
 import { Venue } from '../models/Venue';
 import { AppConfig } from '../models/AppConfig';
 import { clearDemoData } from './clearDemoData';
+
+// Windows / corporate DNS often fails SRV lookups for mongodb+srv — use public resolvers.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const SENDGRID_SEED = {
   fromName: 'ATOMIK',
@@ -238,19 +242,25 @@ async function seed() {
 
   for (const demo of demoUsers) {
     const email = demo.email.toLowerCase();
-    let existing =
-      (await User.findOne({ email }).select('+password')) ??
-      (await User.findOne({ phone: demo.phone }).select('+password'));
+    const existing =
+      (await User.findOne({ email }).select('_id')) ??
+      (await User.findOne({ phone: demo.phone }).select('_id'));
 
     if (existing) {
-      existing.name = demo.name;
-      existing.phone = demo.phone;
-      existing.email = email;
-      existing.role = demo.role;
-      existing.password = demo.password;
-      existing.isActive = true;
-      await existing.save();
-      console.log(`  updated ${email} (${demo.role})`);
+      // Keep existing password/credentials — only refresh profile fields for demo dashboards.
+      await User.updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            name: demo.name,
+            phone: demo.phone,
+            email,
+            role: demo.role,
+            isActive: true,
+          },
+        }
+      );
+      console.log(`  kept credentials for ${email} (${demo.role})`);
       continue;
     }
 

@@ -83,6 +83,9 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
       ? `${formatBookingDate(draft.scheduledDate)} · ${formatBookingTime(draft.scheduledTime)} IST`
       : undefined;
 
+  const isGeneralVisit =
+    draft.categoryIds.length === 1 && draft.categoryIds[0] === 'general-visit';
+
   const placeOrder = async () => {
     if (!canConfirm || !draft.venueId) return;
     if (!holdActive) {
@@ -131,7 +134,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <BookingFlowHeader
-        title="Place order"
+        title={isGeneralVisit ? 'General Visit' : 'Place order'}
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -146,32 +149,30 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : null}
 
-        <Text style={styles.sectionLabel}>CATEGORY</Text>
-        <View style={styles.categoryRow}>
-          {draft.categoryIds.map((id) => {
-            const cat = getServiceById(id);
-            if (!cat) return null;
-            return (
-              <View key={id} style={styles.categoryChip}>
-                <Ionicons
-                  name={cat.icon as keyof typeof Ionicons.glyphMap}
-                  size={18}
-                  color={COLORS.red}
-                />
-                <Text style={styles.chipText}>{cat.label}</Text>
-                <TouchableOpacity onPress={() => removeCategory(id)}>
-                  <Ionicons name="close-circle" size={18} color={COLORS.gray} />
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-          <TouchableOpacity
-            style={styles.addCategory}
-            onPress={() => navigation.navigate('ServiceSubcategories')}
-          >
-            <Ionicons name="add" size={28} color={COLORS.gray} />
-          </TouchableOpacity>
-        </View>
+        {!isGeneralVisit ? (
+          <>
+            <Text style={styles.sectionLabel}>CATEGORY</Text>
+            <View style={styles.categoryRow}>
+              {draft.categoryIds.map((id) => {
+                const cat = getServiceById(id);
+                if (!cat) return null;
+                return (
+                  <View key={id} style={styles.categoryChip}>
+                    <Ionicons
+                      name={cat.icon as keyof typeof Ionicons.glyphMap}
+                      size={18}
+                      color={COLORS.red}
+                    />
+                    <Text style={styles.chipText}>{cat.label}</Text>
+                    <TouchableOpacity onPress={() => removeCategory(id)}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.gray} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
 
         {draft.addressLabel ? (
           <View style={styles.addressBlock}>
@@ -383,17 +384,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_500Medium',
     fontSize: 12,
     color: COLORS.white,
-  },
-  addCategory: {
-    width: 72,
-    height: 72,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
   },
   addressBlock: {
     marginBottom: 16,

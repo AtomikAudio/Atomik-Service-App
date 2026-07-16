@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,6 +13,7 @@ import { Badge } from '../../components/common/Badge';
 import { LoadingView } from '../../components/common/LoadingView';
 import { ErrorView } from '../../components/common/ErrorView';
 import { formatPaymentAmount, paymentService, Invoice } from '../../services/payments';
+import { bookingService } from '../../services/bookings';
 import {
   getClientSparePartsPayAmount,
   getInvoiceBalanceDue,
@@ -67,6 +69,40 @@ export const PendingPaymentsScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
+  const handleCancel = (item: Invoice) => {
+    const booking =
+      typeof item.bookingId === 'object' ? item.bookingId : null;
+    if (!booking?._id) {
+      Alert.alert('Unavailable', 'Could not find this booking to cancel.');
+      return;
+    }
+    Alert.alert(
+      'Cancel booking?',
+      `Cancel booking ${booking.bookingId ?? ''}? This cannot be undone.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel booking',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await bookingService.cancelBooking(
+                booking._id,
+                'Cancelled by client'
+              );
+              await load();
+              Alert.alert('Cancelled', 'Your booking has been cancelled.');
+            } catch (e: unknown) {
+              const msg =
+                e instanceof Error ? e.message : 'Could not cancel booking';
+              Alert.alert('Failed', msg);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error} onRetry={load} />;
 
@@ -119,21 +155,28 @@ export const PendingPaymentsScreen: React.FC<Props> = ({ navigation }) => {
                       : getInvoiceBalanceDue(item)
                   )}
                 </Text>
-                <TouchableOpacity
-                  style={styles.payBtn}
-                  onPress={() => handlePay(item)}
-                >
-                  <Text style={styles.payBtnText}>
-                    {isExtraPartsOnlyPayment(item, lines)
-                      ? 'PAY EXTRA'
-                      : 'PAY NOW'}
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={styles.payBtn}
+                    onPress={() => handlePay(item)}
+                  >
+                    <Text style={styles.payBtnText}>
+                      {isExtraPartsOnlyPayment(item, lines)
+                        ? 'PAY EXTRA'
+                        : 'PAY NOW'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => handleCancel(item)}
+                  >
+                    <Text style={styles.cancelBtnText}>CANCEL</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           );
         }}
-        keyExtractor={(item) => item._id}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -203,15 +246,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
   },
   amount: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 18,
     color: COLORS.white,
+    flexShrink: 0,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
   },
   payBtn: {
     backgroundColor: COLORS.red,
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
   },
@@ -219,6 +270,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 11,
     color: COLORS.white,
+    letterSpacing: 1,
+  },
+  cancelBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.borderActive,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cancelBtnText: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 11,
+    color: COLORS.grayLight,
     letterSpacing: 1,
   },
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },

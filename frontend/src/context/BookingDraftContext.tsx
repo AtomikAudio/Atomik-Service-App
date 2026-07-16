@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { ApiServiceType, resolvePrimaryServiceType } from '../constants/audioServices';
 
+export const GENERAL_VISIT_CATEGORY_ID = 'general-visit';
+
 export interface BookingDraft {
   categoryIds: string[];
   venueId?: string;
@@ -41,11 +43,28 @@ export const BookingDraftProvider: React.FC<{ children: React.ReactNode }> = ({
   const resetDraft = useCallback(() => setDraft(emptyDraft), []);
 
   const addCategory = useCallback((id: string) => {
-    setDraft((d) =>
-      d.categoryIds.includes(id)
-        ? d
-        : { ...d, categoryIds: [...d.categoryIds, id] }
-    );
+    setDraft((d) => {
+      // General Visit is standalone — never combine with General Service (or anything else).
+      if (id === GENERAL_VISIT_CATEGORY_ID) {
+        if (
+          d.categoryIds.length === 1 &&
+          d.categoryIds[0] === GENERAL_VISIT_CATEGORY_ID
+        ) {
+          return d;
+        }
+        return { ...d, categoryIds: [GENERAL_VISIT_CATEGORY_ID] };
+      }
+
+      const withoutVisit = d.categoryIds.filter(
+        (c) => c !== GENERAL_VISIT_CATEGORY_ID
+      );
+      if (withoutVisit.includes(id)) {
+        return withoutVisit.length === d.categoryIds.length
+          ? d
+          : { ...d, categoryIds: withoutVisit };
+      }
+      return { ...d, categoryIds: [...withoutVisit, id] };
+    });
   }, []);
 
   const removeCategory = useCallback((id: string) => {

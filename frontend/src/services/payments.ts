@@ -106,11 +106,26 @@ export const paymentService = {
     return res.invoices ?? [];
   },
 
-  async createOrder(invoiceId: string, payFor?: 'full' | 'extra_parts') {
-    return api.post('/payments/create-order', { invoiceId, payFor }) as Promise<{
+  async createOrder(
+    invoiceId: string,
+    payFor?: 'full' | 'extra_parts',
+    couponCode?: string
+  ) {
+    return api.post('/payments/create-order', {
+      invoiceId,
+      payFor,
+      ...(couponCode ? { couponCode } : {}),
+    }) as Promise<{
       demo?: boolean;
       order: { id: string; amount: number; currency: string };
       invoice: { invoiceNumber: string; totalAmount: number };
+      coupon?: {
+        couponCode: string;
+        discountPercent: number;
+        discountAmount: number;
+        originalAmount: number;
+        label: string;
+      } | null;
       key: string;
       demoPayment?: {
         orderId: string;
@@ -120,6 +135,18 @@ export const paymentService = {
       message?: string;
     }>;
   },
+
+  // ₹1 dev test payment — disabled. Re-enable with DevTestPaymentCard + backend route.
+  // async createDevTestOrder() {
+  //   return api.post('/payments/dev-test-order') as Promise<{
+  //     devTest: true;
+  //     invoiceId: string;
+  //     bookingId: string;
+  //     order: { id: string; amount: number; currency: string };
+  //     invoice: { invoiceNumber: string; totalAmount: number; balanceDue: number };
+  //     key: string;
+  //   }>;
+  // },
 
   async verifyPayment(payload: {
     invoiceId: string;

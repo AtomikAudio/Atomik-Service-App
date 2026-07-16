@@ -5,39 +5,36 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
 import { DashboardTopBar } from '../../components/common/DashboardTopBar';
-import { Badge } from '../../components/common/Badge';
 import { Card } from '../../components/common/Card';
 import { FadeIn } from '../../components/common/FadeIn';
 import { PressableScale } from '../../components/common/PressableScale';
 import { LoadingView } from '../../components/common/LoadingView';
-import { TechnicianAssignedCard } from '../../components/client/TechnicianAssignedCard';
 import { bookingService, Booking } from '../../services/bookings';
 import { paymentService } from '../../services/payments';
 import {
-  formatBookingStatus,
+  formatServiceTypeLabel,
   getTechnicianFromBooking,
 } from '../../utils/bookingDisplay';
-import { SparePartsSummary } from '../../components/common/SparePartsSummary';
 import { Button } from '../../components/common/Button';
-import { bookingHasSpareParts } from '../../utils/spareParts';
 import {
-  getDisplayExtraPartsAmount,
   getInvoiceBalanceDue,
-  hasQuotedSpareParts,
   invoiceNeedsPayment,
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { navigateToBookingPayment } from '../../utils/navigatePayment';
-import { formatINR } from '../../utils/payment';
 import { formatBookingSchedule, getISTGreetingHour } from '../../utils/schedule';
 import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
 import { SafeScrollView } from '../../components/common/SafeScrollView';
+import { RescheduleProposalCard } from '../../components/client/RescheduleProposalCard';
+// ₹1 dev test payment — disabled; re-enable import + block below when needed.
+// import { DevTestPaymentCard } from '../../components/client/DevTestPaymentCard';
 
 interface Props {
   navigation: any;
@@ -85,6 +82,34 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, []);
 
+  const deleteBooking = (booking: Booking) => {
+    Alert.alert(
+      'Delete booking?',
+      `Delete booking ${booking.bookingId}? This cannot be undone.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await bookingService.cancelBooking(
+                booking._id,
+                'Cancelled by client'
+              );
+              await load();
+              Alert.alert('Deleted', 'Your booking has been deleted.');
+            } catch (e: unknown) {
+              const msg =
+                e instanceof Error ? e.message : 'Could not delete booking';
+              Alert.alert('Failed', msg);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useFocusEffect(
     useCallback(() => {
       load();
@@ -93,6 +118,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const upcomingServices = bookings.filter(
     (b) => !['completed', 'cancelled'].includes(b.status)
+  );
+  const pendingReschedules = upcomingServices.filter(
+    (b) => b.reschedule?.status === 'pending_client'
   );
 
   const hour = getISTGreetingHour();
@@ -116,30 +144,69 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </FadeIn>
 
         <FadeIn index={2} style={styles.statsRow}>
-          <Card style={styles.statCard} padding={14}>
-            <Text style={styles.statNum}>
-              {bookings.filter((b) => !['completed', 'cancelled'].includes(b.status)).length}
-            </Text>
-            <Text style={styles.statLabel}>Upcoming{'\n'}Services</Text>
-          </Card>
-          <Card style={styles.statCard} padding={14}>
-            <Text style={styles.statNum}>{pendingCount}</Text>
-            <Text style={styles.statLabel}>Pending{'\n'}Payment</Text>
-          </Card>
-          <Card style={styles.statCard} padding={14}>
-            <Text style={styles.statNum}>
-              {bookings.filter((b) => b.status === 'completed').length}
-            </Text>
-            <Text style={styles.statLabel}>Completed{'\n'}Services</Text>
-          </Card>
+          <PressableScale
+            onPress={() => navigation.navigate('UpcomingServices')}
+            style={styles.statPressable}
+            scaleTo={0.96}
+          >
+            <Card style={styles.statCard} padding={14}>
+              <Text style={styles.statNum}>
+                {bookings.filter(
+                  (b) => !['completed', 'cancelled'].includes(b.status)
+                ).length}
+              </Text>
+              <Text style={styles.statLabel}>Upcoming{'\n'}Services</Text>
+            </Card>
+          </PressableScale>
+          <PressableScale
+            onPress={() => navigation.getParent()?.navigate('Payments')}
+            style={styles.statPressable}
+            scaleTo={0.96}
+          >
+            <Card style={styles.statCard} padding={14}>
+              <Text style={styles.statNum}>{pendingCount}</Text>
+              <Text style={styles.statLabel}>Pending{'\n'}Payment</Text>
+            </Card>
+          </PressableScale>
+          <PressableScale
+            onPress={() => navigation.navigate('CompletedServices')}
+            style={styles.statPressable}
+            scaleTo={0.96}
+          >
+            <Card style={styles.statCard} padding={14}>
+              <Text style={styles.statNum}>
+                {bookings.filter((b) => b.status === 'completed').length}
+              </Text>
+              <Text style={styles.statLabel}>Completed{'\n'}Services</Text>
+            </Card>
+          </PressableScale>
         </FadeIn>
 
         <FadeIn index={3} style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Upcoming Services</Text>
-          <TouchableOpacity onPress={() => navigation.getParent()?.navigate('Services')}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('UpcomingServices')}
+          >
             <Text style={styles.viewAll}>View All</Text>
           </TouchableOpacity>
         </FadeIn>
+
+        {pendingReschedules.length > 0 ? (
+          <FadeIn index={3.5}>
+            {pendingReschedules.map((item) => (
+              <RescheduleProposalCard
+                key={`reschedule-${item._id}`}
+                booking={item}
+                compact
+                onUpdated={(updated) => {
+                  setBookings((prev) =>
+                    prev.map((b) => (b._id === updated._id ? updated : b))
+                  );
+                }}
+              />
+            ))}
+          </FadeIn>
+        ) : null}
 
         <FadeIn index={4}>
           {upcomingServices.length > 0 ? (
@@ -150,70 +217,81 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               {upcomingServices.map((item) => {
                 const tech = getTechnicianFromBooking(item);
+                const needsPay = invoiceNeedsPayment(item.invoice);
+                const openTracking = () =>
+                  navigation.navigate('TrackService', { id: item._id });
                 return (
-                  <Card key={item._id} style={styles.serviceCardHorizontal} padding={16}>
-                    <Text style={styles.serviceType}>{item.serviceType}</Text>
-                    <Text style={styles.serviceDetailValue}>
-                      {item.venueId?.name ?? 'Venue'}
-                    </Text>
-                    <Text style={styles.serviceDate}>
-                      {formatBookingSchedule(item.scheduledDate, item.scheduledTime)}
-                    </Text>
-                    <Badge
-                      label={formatBookingStatus(item.status)}
-                      variant="confirmed"
-                    />
-                    {tech ? (
-                      <View style={styles.techInline}>
-                        <Ionicons name="person-outline" size={14} color={COLORS.gray} />
-                        <Text style={styles.techInlineText} numberOfLines={1}>
-                          {tech.name}
-                          {tech.phone ? ` · ${tech.phone}` : ''}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.awaitingTech}>Awaiting technician</Text>
-                    )}
-                    {bookingHasSpareParts(item) ? (
-                      <SparePartsSummary
-                        parts={item.spareParts}
-                        compact={true}
-                        showWithGst={!!item.invoice?.amountPaid}
-                      />
-                    ) : null}
-                    {hasQuotedSpareParts(item.invoice, item.spareParts) ? (
-                      <Text style={styles.extraDueLine}>
-                        {isExtraPartsOnlyPayment(item.invoice, item.spareParts)
-                          ? 'Extra parts due: '
-                          : 'Extra parts (incl. GST): '}
-                        {formatINR(
-                          getDisplayExtraPartsAmount(
-                            item.invoice,
-                            item.spareParts
-                          )
+                  <PressableScale
+                    key={item._id}
+                    onPress={openTracking}
+                    style={styles.serviceCardPressable}
+                  >
+                    <Card style={styles.serviceCardHorizontal} padding={16}>
+                      <Text style={styles.serviceType} numberOfLines={1}>
+                        {formatServiceTypeLabel(item.serviceType)}
+                      </Text>
+                      <Text style={styles.serviceDetailValue} numberOfLines={1}>
+                        {item.venueId?.name ?? 'Venue'}
+                      </Text>
+                      <Text style={styles.serviceDate} numberOfLines={1}>
+                        {formatBookingSchedule(
+                          item.scheduledDate,
+                          item.scheduledTime
                         )}
                       </Text>
-                    ) : null}
-                    {invoiceNeedsPayment(item.invoice) ? (
-                      <Button
-                        label={
-                          isExtraPartsOnlyPayment(item.invoice, item.spareParts)
-                            ? 'PAY EXTRA PARTS'
-                            : 'PAY NOW'
-                        }
-                        onPress={() => navigateToBookingPayment(navigation, item, item.invoice)}
-                        style={styles.payBtn}
-                      />
-                    ) : null}
-                    <TouchableOpacity
-                      style={styles.detailsBtn}
-                      onPress={() =>
-                        navigation.navigate('TrackService', { id: item._id })
-                      }
-                    >
-                      <Text style={styles.detailsBtnText}>TRACK</Text>
-                    </TouchableOpacity>
-                  </Card>
+                      {tech ? (
+                        <Text style={styles.techInlineText} numberOfLines={1}>
+                          {tech.name}
+                        </Text>
+                      ) : (
+                        <Text style={styles.awaitingTech}>Awaiting technician</Text>
+                      )}
+                      <View style={styles.payCancelRow}>
+                        <View style={styles.halfSlot}>
+                          {needsPay ? (
+                            <Button
+                              label={
+                                isExtraPartsOnlyPayment(
+                                  item.invoice,
+                                  item.spareParts
+                                )
+                                  ? 'PAY EXTRA'
+                                  : 'PAY NOW'
+                              }
+                              onPress={() =>
+                                navigateToBookingPayment(
+                                  navigation,
+                                  item,
+                                  item.invoice
+                                )
+                              }
+                              style={styles.cardActionBtn}
+                              textStyle={styles.cardActionBtnText}
+                            />
+                          ) : (
+                            <View style={styles.paidBadge}>
+                              <Text style={styles.paidBadgeText}>PAID</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.halfSlot}>
+                          <Button
+                            label="DELETE"
+                            variant="outline"
+                            onPress={() => deleteBooking(item)}
+                            style={styles.cardActionBtn}
+                            textStyle={styles.cardActionBtnText}
+                          />
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.detailsBtn}
+                        onPress={openTracking}
+                      >
+                        <Text style={styles.detailsBtnText}>VIEW MORE</Text>
+                      </TouchableOpacity>
+                    </Card>
+                  </PressableScale>
                 );
               })}
             </ScrollView>
@@ -267,18 +345,62 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  extraDueLine: {
+  payCancelRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+    alignItems: 'stretch',
+    width: '100%',
+  },
+  halfSlot: {
+    flex: 1,
+    minWidth: 0,
+  },
+  paidBadge: {
+    width: '100%',
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.ashGrayBorder,
+    backgroundColor: COLORS.ashGrayBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paidBadgeText: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 11,
+    color: COLORS.ashGray,
+    letterSpacing: 1,
+  },
+  cardActionBtn: {
+    width: '100%',
+    height: 44,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  cardActionBtnText: {
+    fontSize: 11,
+    letterSpacing: 1,
+  },
+  detailsBtn: {
+    marginTop: 10,
+    width: '100%',
+    alignSelf: 'stretch',
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsBtnText: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 11,
     color: COLORS.red,
-    marginTop: 8,
-  },
-  payBtn: {
-    marginTop: 10,
-    minHeight: 44,
+    letterSpacing: 1,
   },
   scroll: { paddingHorizontal: 20 },
-  greetingRow: { marginBottom: 24 },
+  greetingRow: { marginBottom: 20 },
   greetingLabel: {
     fontFamily: 'Montserrat_500Medium',
     fontSize: 14,
@@ -286,10 +408,11 @@ const styles = StyleSheet.create({
   },
   greetingName: {
     fontFamily: 'Montserrat_700Bold',
-    fontSize: 30,
+    fontSize: 28,
     color: COLORS.white,
   },
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 22 },
+  statPressable: { flex: 1 },
   statCard: { flex: 1 },
   statNum: {
     fontFamily: 'Montserrat_700Bold',
@@ -319,17 +442,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.red,
   },
-  serviceCard: { marginBottom: 28 },
-  horizontalList: { paddingBottom: 8, gap: 12 },
+  horizontalList: { paddingBottom: 8, gap: 14, paddingRight: 8 },
+  serviceCardPressable: {
+    width: 268,
+  },
   serviceCardHorizontal: {
-    width: 280,
+    width: '100%',
     marginRight: 0,
   },
   serviceType: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 15,
     color: COLORS.white,
-    textTransform: 'capitalize',
   },
   serviceDetailValue: {
     fontFamily: 'Montserrat_500Medium',
@@ -341,42 +465,23 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono_400Regular',
     fontSize: 11,
     color: COLORS.gray,
-    marginVertical: 10,
-  },
-  techInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
+    marginTop: 10,
+    marginBottom: 6,
   },
   techInlineText: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.gray,
-    flex: 1,
+    marginTop: 6,
   },
   awaitingTech: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.grayDark,
-    marginTop: 12,
-  },
-  detailsBtn: {
-    marginTop: 12,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.red,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailsBtnText: {
-    fontFamily: 'Montserrat_600SemiBold',
-    fontSize: 10,
-    color: COLORS.red,
+    marginTop: 6,
   },
   empty: { color: COLORS.gray, fontFamily: 'Montserrat_400Regular' },
-  quickActionsSection: { marginBottom: 20 },
+  quickActionsSection: { marginTop: 16, marginBottom: 24 },
   sectionTitleInline: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 15,

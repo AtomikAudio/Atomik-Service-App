@@ -1,3 +1,4 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { migrateBookings } from '../utils/migrateBookings';
 
@@ -9,6 +10,18 @@ export const connectDB = async (): Promise<void> => {
     throw new Error(
       'MONGODB_URI is not defined. Add it to backend/.env (see backend/.env.example).'
     );
+  }
+
+  // Some local/ISP DNS resolvers refuse SRV lookups (querySrv ECONNREFUSED),
+  // which breaks mongodb+srv:// connection strings. Fall back to public DNS.
+  if (uri.startsWith('mongodb+srv://')) {
+    const servers = (process.env.DNS_SERVERS ?? '8.8.8.8,1.1.1.1')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (servers.length) {
+      dns.setServers(servers);
+    }
   }
 
   if (uri.includes('localhost') && !uri.includes('127.0.0.1')) {

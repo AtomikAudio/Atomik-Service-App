@@ -3,7 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { notificationService } from '../services/notifications';
 
-const POLL_MS = 20000;
+const POLL_MS = 30000;
 
 export const useUnreadNotifications = () => {
   const [unreadCount, setUnreadCount] = useState(0);

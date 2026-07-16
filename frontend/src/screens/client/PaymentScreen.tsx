@@ -7,11 +7,13 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Header } from '../../components/common/Header';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { Input } from '../../components/common/Input';
 import { paymentService } from '../../services/payments';
 import { bookingService } from '../../services/bookings';
 import { SparePartLine } from '../../utils/spareParts';
@@ -22,6 +24,7 @@ import {
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
+import { applyLocalCoupon } from '../../utils/coupons';
 import { COLORS } from '../../constants/colors';
 
 interface Props {
@@ -110,6 +113,16 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const [sparePartsLines, setSparePartsLines] = useState<SparePartLine[]>([]);
   const [webviewVisible, setWebviewVisible] = useState(false);
   const [checkoutHtml, setCheckoutHtml] = useState('');
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    couponCode: string;
+    discountPercent: number;
+    discountAmount: number;
+    originalAmount: number;
+    chargeAmount: number;
+    label: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState('');
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -153,14 +166,40 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     payFor === 'extra_parts' ||
     (invoice ? isExtraPartsOnlyPayment(invoice, sparePartsLines) : false);
   const balanceDue = invoice ? getInvoiceBalanceDue(invoice) : 0;
-  const amountToPay = isExtraParts
+  const baseAmountToPay = isExtraParts
     ? getClientSparePartsPayAmount(invoice, sparePartsLines)
     : balanceDue;
+  const amountToPay = appliedCoupon
+    ? appliedCoupon.chargeAmount
+    : baseAmountToPay;
   const sparePreTax = sumSparePartsTotal(sparePartsLines) || (invoice?.spareParts ?? 0);
   const gstOnExtra = invoice
     ? getExtraPartsGstAmount(invoice, sparePartsLines, invoice.taxRate)
     : 0;
   const gstLabel = `GST (${Math.round((invoice?.taxRate ?? 0.18) * 100)}%)`;
+
+  const applyCoupon = () => {
+    const result = applyLocalCoupon(baseAmountToPay, couponInput);
+    if (!result) {
+      setAppliedCoupon(null);
+      setCouponError('Invalid coupon code');
+      return;
+    }
+    if (result.chargeAmount <= 0) {
+      setAppliedCoupon(null);
+      setCouponError('Coupon cannot be applied to this amount');
+      return;
+    }
+    setAppliedCoupon(result);
+    setCouponError('');
+    setCouponInput(result.couponCode);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError('');
+    setCouponInput('');
+  };
 
   const handlePayment = async () => {
     if (!invoiceId) {
@@ -175,7 +214,8 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       const orderData = await paymentService.createOrder(
         invoiceId,
-        isExtraParts ? 'extra_parts' : 'full'
+        isExtraParts ? 'extra_parts' : 'full',
+        appliedCoupon?.couponCode
       );
 
       if (orderData.demo && orderData.demoPayment) {
@@ -264,6 +304,46 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const cancelBooking = () => {
+    if (!bookingId) {
+      Alert.alert('Unavailable', 'Could not find this booking to cancel.');
+      return;
+    }
+    Alert.alert(
+      'Cancel booking?',
+      'Cancel this booking before payment? This cannot be undone.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel booking',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await bookingService.cancelBooking(
+                bookingId,
+                'Cancelled by client before payment'
+              );
+              Alert.alert('Cancelled', 'Your booking has been cancelled.', [
+                {
+                  text: 'OK',
+                  onPress: () =>
+                    navigation.navigate('ServiceCategories', { reset: true }),
+                },
+              ]);
+            } catch (e: unknown) {
+              const msg =
+                e instanceof Error ? e.message : 'Could not cancel booking';
+              Alert.alert('Failed', msg);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -355,6 +435,76 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             )}
           </Card>
         )}
+
+        {baseAmountToPay > 0 ? (
+          <Card style={styles.couponCard} padding={18}>
+            <Text style={styles.billTitle}>Apply coupon</Text>
+            {appliedCoupon ? (
+              <View style={styles.couponAppliedBox}>
+                <View style={styles.couponAppliedTextWrap}>
+                  <Text style={styles.couponAppliedCode}>
+                    {appliedCoupon.couponCode} applied
+                  </Text>
+                  <Text style={styles.couponAppliedLabel}>
+                    {appliedCoupon.label} · save{' '}
+                    {formatINR(appliedCoupon.discountAmount)}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={removeCoupon} hitSlop={10}>
+                  <Text style={styles.couponRemove}>REMOVE</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={styles.couponRow}>
+                  <View style={styles.couponInputWrap}>
+                    <Input
+                      placeholder="Enter coupon code"
+                      value={couponInput}
+                      onChangeText={(text) => {
+                        setCouponInput(text);
+                        if (couponError) setCouponError('');
+                      }}
+                      autoCapitalize="characters"
+                      error={couponError || undefined}
+                    />
+                  </View>
+                  <Button
+                    label="APPLY"
+                    variant="outline"
+                    onPress={applyCoupon}
+                    fullWidth={false}
+                    style={styles.couponApplyBtn}
+                  />
+                </View>
+              </>
+            )}
+            {appliedCoupon ? (
+              <>
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Subtotal</Text>
+                  <Text style={styles.billValue}>
+                    {formatINR(appliedCoupon.originalAmount)}
+                  </Text>
+                </View>
+                <View style={styles.billRow}>
+                  <Text style={styles.discountLabel}>
+                    Discount ({appliedCoupon.discountPercent}%)
+                  </Text>
+                  <Text style={styles.discountValue}>
+                    −{formatINR(appliedCoupon.discountAmount)}
+                  </Text>
+                </View>
+                <View style={[styles.billRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>Amount to pay now</Text>
+                  <Text style={styles.totalValue}>
+                    {formatINR(appliedCoupon.chargeAmount)}
+                  </Text>
+                </View>
+              </>
+            ) : null}
+          </Card>
+        ) : null}
       </ScrollView>
       <View style={styles.footer}>
         <Button
@@ -368,6 +518,15 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           onPress={handlePayment}
           loading={loading}
         />
+        {!isExtraParts && bookingId ? (
+          <Button
+            label="CANCEL BOOKING"
+            variant="outline"
+            onPress={cancelBooking}
+            disabled={loading}
+            style={styles.cancelBtn}
+          />
+        ) : null}
       </View>
       <Modal visible={webviewVisible} animationType="slide">
         <View style={styles.webviewWrap}>
@@ -390,7 +549,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: 24, paddingBottom: 120 },
+  scroll: { padding: 24, paddingBottom: 160 },
   title: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 24,
@@ -410,6 +569,61 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   billCard: { marginBottom: 16 },
+  couponCard: { marginBottom: 16 },
+  couponRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  couponInputWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  couponApplyBtn: {
+    marginTop: 4,
+    minWidth: 88,
+    height: 48,
+  },
+  couponAppliedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(178, 190, 181, 0.35)',
+    backgroundColor: 'rgba(178, 190, 181, 0.08)',
+  },
+  couponAppliedTextWrap: { flex: 1, minWidth: 0 },
+  couponAppliedCode: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 13,
+    color: COLORS.ashGray,
+  },
+  couponAppliedLabel: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 4,
+  },
+  couponRemove: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 11,
+    color: COLORS.red,
+    letterSpacing: 0.8,
+  },
+  discountLabel: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    color: COLORS.ashGray,
+  },
+  discountValue: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 13,
+    color: COLORS.ashGray,
+  },
   billTitle: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
@@ -462,6 +676,10 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 36,
     backgroundColor: COLORS.background,
+    gap: 10,
+  },
+  cancelBtn: {
+    marginTop: 0,
   },
   webviewWrap: { flex: 1, backgroundColor: COLORS.background },
 });

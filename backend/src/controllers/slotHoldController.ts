@@ -19,7 +19,8 @@ export const getSlotsAvailability = async (
       return;
     }
 
-    const result = await getSlotAvailability(date, req.user!.id);
+    const excludeBookingId = String(req.query.excludeBookingId ?? '').trim() || undefined;
+    const result = await getSlotAvailability(date, req.user!.id, excludeBookingId);
     res.status(200).json({ success: true, ...result });
   } catch (err) {
     next(err);

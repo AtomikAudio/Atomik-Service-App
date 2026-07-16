@@ -63,7 +63,10 @@ export const PastPaymentsScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.card}
           onPress={() => {
             if (item.bookingMongoId) {
-              navigation.navigate('ServiceDetails', { id: item.bookingMongoId });
+              navigation.navigate('ServiceDetails', {
+                id: item.bookingMongoId,
+                readOnly: true,
+              });
             }
           }}
         >

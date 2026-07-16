@@ -41,15 +41,36 @@ export async function purgeExpiredHolds(): Promise<void> {
 
 export async function isSlotBooked(
   scheduledDate: string,
-  scheduledTime: string
+  scheduledTime: string,
+  excludeBookingId?: string
 ): Promise<boolean> {
   const day = parseScheduledDate(scheduledDate);
-  const existing = await Booking.findOne({
+  const normalizedTime = normalizeSlotTime(scheduledTime);
+  const filter: Record<string, unknown> = {
     scheduledDate: day,
-    scheduledTime,
+    scheduledTime: normalizedTime,
     status: { $ne: 'cancelled' },
-  }).select('_id');
+  };
+  if (excludeBookingId) {
+    filter._id = { $ne: new mongoose.Types.ObjectId(excludeBookingId) };
+  }
+  const existing = await Booking.findOne(filter).select('_id');
   return Boolean(existing);
+}
+
+export async function assertRescheduleSlotAvailable(
+  scheduledDate: string,
+  scheduledTime: string,
+  excludeBookingId: string
+): Promise<void> {
+  const normalizedTime = normalizeSlotTime(scheduledTime);
+  const cleaned = normalizedTime.replace(/\s*IST\s*$/i, '').trim();
+  if (!(BOOKING_TIME_SLOTS as readonly string[]).includes(cleaned)) {
+    throw new BadRequestError('Invalid time slot');
+  }
+  if (await isSlotBooked(scheduledDate, normalizedTime, excludeBookingId)) {
+    throw new BadRequestError('This time slot is already booked');
+  }
 }
 
 export async function getClientHold(clientId: string) {
@@ -67,7 +88,8 @@ function toObjectId(id: string): mongoose.Types.ObjectId {
 
 export async function getSlotAvailability(
   dateInput: string,
-  clientId: string
+  clientId: string,
+  excludeBookingId?: string
 ): Promise<{
   date: string;
   slots: SlotAvailabilityItem[];
@@ -84,11 +106,16 @@ export async function getSlotAvailability(
   const day = parseScheduledDate(scheduledDate);
   const clientOid = toObjectId(clientId);
 
+  const bookingFilter: Record<string, unknown> = {
+    scheduledDate: day,
+    status: { $ne: 'cancelled' },
+  };
+  if (excludeBookingId) {
+    bookingFilter._id = { $ne: new mongoose.Types.ObjectId(excludeBookingId) };
+  }
+
   const [bookings, holds, myHold] = await Promise.all([
-    Booking.find({
-      scheduledDate: day,
-      status: { $ne: 'cancelled' },
-    }).select('scheduledTime'),
+    Booking.find(bookingFilter).select('scheduledTime'),
     SlotHold.find({
       scheduledDate,
       expiresAt: { $gt: new Date() },

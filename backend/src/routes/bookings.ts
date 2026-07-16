@@ -11,6 +11,8 @@ import {
   acceptJob,
   rejectJob,
   dropJob,
+  proposeReschedule,
+  respondToReschedule,
 } from '../controllers/bookingController';
 import {
   createSlotHold,
@@ -26,6 +28,8 @@ import {
   holdSlotRules,
   masterAssignRules,
   mongoIdParamRules,
+  rescheduleProposeRules,
+  rescheduleRespondRules,
   slotAvailabilityQueryRules,
   updateBookingStatusRules,
   validate,
@@ -37,8 +41,7 @@ router.use(authenticate);
 
 router.get(
   '/slots/availability',
-  authorize('client'),
-  slotAvailabilityQueryRules,
+  authorize('client', 'technician', 'master_technician'),
   validate,
   getSlotsAvailability
 );
@@ -107,6 +110,20 @@ router.patch(
   cancelBookingRules,
   validate,
   cancelBooking
+);
+router.post(
+  '/:id/reschedule/propose',
+  ...rescheduleProposeRules,
+  validate,
+  authorize('technician', 'master_technician'),
+  proposeReschedule
+);
+router.post(
+  '/:id/reschedule/respond',
+  ...rescheduleRespondRules,
+  validate,
+  authorize('client', 'technician', 'master_technician'),
+  respondToReschedule
 );
 
 export default router;

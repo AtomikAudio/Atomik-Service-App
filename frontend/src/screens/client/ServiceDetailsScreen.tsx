@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '../../components/common/Header';
 import { Card } from '../../components/common/Card';
@@ -9,10 +9,7 @@ import { ErrorView } from '../../components/common/ErrorView';
 import { TechnicianAssignedCard } from '../../components/client/TechnicianAssignedCard';
 import { bookingService, Booking } from '../../services/bookings';
 import { paymentService, Invoice } from '../../services/payments';
-import {
-  formatBookingStatus,
-  getTechnicianFromBooking,
-} from '../../utils/bookingDisplay';
+import { getTechnicianFromBooking } from '../../utils/bookingDisplay';
 import { SparePartsSummary } from '../../components/common/SparePartsSummary';
 import { bookingHasSpareParts } from '../../utils/spareParts';
 import {
@@ -25,17 +22,18 @@ import { COLORS } from '../../constants/colors';
 
 interface Props {
   navigation: any;
-  route: { params: { id: string } };
+  route: { params: { id: string; readOnly?: boolean } };
 }
 
 const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
 export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { id } = route.params;
+  const { id, readOnly = false } = route.params;
   const [booking, setBooking] = useState<Booking | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,10 +60,44 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
     }, [load])
   );
 
+  const cancelBooking = () => {
+    if (!booking) return;
+    Alert.alert(
+      'Cancel booking?',
+      `Cancel booking ${booking.bookingId}? This cannot be undone.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel booking',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              await bookingService.cancelBooking(
+                booking._id,
+                'Cancelled by client'
+              );
+              Alert.alert('Cancelled', 'Your booking has been cancelled.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            } catch (e: unknown) {
+              const msg =
+                e instanceof Error ? e.message : 'Could not cancel booking';
+              Alert.alert('Failed', msg);
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) return <LoadingView />;
   if (error || !booking) return <ErrorView message={error} onRetry={load} />;
 
   const technician = getTechnicianFromBooking(booking);
+  const canCancel = !readOnly && !['completed', 'cancelled'].includes(booking.status);
 
   return (
     <View style={styles.container}>
@@ -78,15 +110,12 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           <Text style={styles.value}>{booking.serviceType}</Text>
           <Text style={styles.label}>Venue</Text>
           <Text style={styles.value}>{booking.venueId?.name ?? '—'}</Text>
-          <Text style={styles.label}>Status</Text>
-          <Text style={styles.value}>{formatBookingStatus(booking.status)}</Text>
         </Card>
 
         {technician ? (
           <TechnicianAssignedCard
             name={technician.name}
             phone={technician.phone}
-            statusLabel={formatBookingStatus(booking.status)}
           />
         ) : null}
 
@@ -122,22 +151,51 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           </Card>
         )}
 
-        <Button
-          label="TRACK SERVICE"
-          onPress={() => navigation.navigate('TrackService', { id: booking._id })}
-          style={{ marginTop: 16 }}
-        />
-        {invoice && invoiceNeedsPayment(invoice) && (
-          <Button
-            label={
-              isExtraPartsOnlyPayment(invoice, booking.spareParts)
-                ? 'PAY EXTRA PARTS'
-                : 'PAY NOW'
-            }
-            onPress={() => navigateToBookingPayment(navigation, booking, invoice)}
-            style={{ marginTop: 10 }}
-          />
-        )}
+        {!readOnly ? (
+          <>
+            <Button
+              label="TRACK SERVICE"
+              onPress={() =>
+                navigation.navigate('TrackService', { id: booking._id })
+              }
+              style={{ marginTop: 16 }}
+            />
+            {invoice && invoiceNeedsPayment(invoice) ? (
+              <View style={styles.payCancelRow}>
+                <Button
+                  label={
+                    isExtraPartsOnlyPayment(invoice, booking.spareParts)
+                      ? 'PAY EXTRA PARTS'
+                      : 'PAY NOW'
+                  }
+                  onPress={() =>
+                    navigateToBookingPayment(navigation, booking, invoice)
+                  }
+                  style={styles.payBtnFlex}
+                  fullWidth={false}
+                />
+                {canCancel ? (
+                  <Button
+                    label="CANCEL"
+                    variant="outline"
+                    onPress={cancelBooking}
+                    loading={cancelling}
+                    style={styles.cancelBtnFlex}
+                    fullWidth={false}
+                  />
+                ) : null}
+              </View>
+            ) : canCancel ? (
+              <Button
+                label="CANCEL BOOKING"
+                variant="outline"
+                onPress={cancelBooking}
+                loading={cancelling}
+                style={{ marginTop: 10 }}
+              />
+            ) : null}
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -172,6 +230,21 @@ const styles = StyleSheet.create({
   },
   muted: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: COLORS.gray },
   total: { fontFamily: 'Montserrat_700Bold', fontSize: 18, color: COLORS.white },
-  value: { fontFamily: 'Montserrat_600SemiBold', fontSize: 14, color: COLORS.white },
   due: { fontFamily: 'Montserrat_700Bold', fontSize: 16, color: COLORS.red },
+  payCancelRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    alignItems: 'stretch',
+  },
+  payBtnFlex: {
+    flex: 1,
+    minHeight: 44,
+    minWidth: 0,
+  },
+  cancelBtnFlex: {
+    flex: 1,
+    minHeight: 44,
+    minWidth: 0,
+  },
 });

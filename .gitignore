@@ -5,6 +5,8 @@ node_modules/
 .env
 .env.local
 .env.*.local
+rzp-key.csv
+*-key.csv
 backend/dist/
 
 # Expo / React Native

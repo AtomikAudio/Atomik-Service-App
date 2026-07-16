@@ -479,3 +479,89 @@ export const updateFcmToken = async (
     next(err);
   }
 };
+
+/**
+ * Soft-delete the authenticated account (App Store account-deletion requirement).
+ * Anonymizes PII, deactivates login, invalidates tokens, cancels open client bookings.
+ */
+export const deleteAccount = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const user = await User.findById(req.user!.id).select('+password');
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.status(400).json({ success: false, message: 'Account is already deleted' });
+      return;
+    }
+
+    const userId = user._id.toString();
+    const now = new Date();
+
+    // Cancel open bookings owned by this client so techs aren't stuck with dead jobs.
+    if (user.role === 'client') {
+      const { Booking } = await import('../models/Booking');
+      await Booking.updateMany(
+        {
+          clientId: user._id,
+          status: { $nin: ['completed', 'cancelled'] },
+        },
+        {
+          $set: {
+            status: 'cancelled',
+            cancelledAt: now,
+            cancellationReason: 'Account deleted by user',
+          },
+          $push: {
+            statusHistory: {
+              status: 'cancelled',
+              timestamp: now,
+              notes: 'Cancelled — account deleted',
+              updatedBy: user._id,
+            },
+          },
+        }
+      );
+    }
+
+    if (user.phone) {
+      const { OtpVerification } = await import('../models/OtpVerification');
+      await OtpVerification.deleteMany({ phone: user.phone }).catch(() => undefined);
+    }
+
+    const tombstoneEmail = `deleted_${userId}@deleted.local`;
+    const tombstonePhone = `deleted_${userId}`;
+
+    await User.findByIdAndUpdate(user._id, {
+      $set: {
+        name: 'Deleted Account',
+        email: tombstoneEmail,
+        phone: tombstonePhone,
+        isActive: false,
+        phoneVerified: false,
+        password: crypto.randomBytes(32).toString('hex'),
+        tokenVersion: (user.tokenVersion ?? 0) + 1,
+      },
+      $unset: {
+        avatar: 1,
+        fcmToken: 1,
+        appwriteUserId: 1,
+        passwordResetToken: 1,
+        passwordResetExpires: 1,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -11,6 +11,8 @@ import { NotificationsScreen } from '../screens/client/NotificationsScreen';
 import { AccountStack } from './AccountStack';
 import { PaymentsHubScreen } from '../screens/client/PaymentsHubScreen';
 import { ServiceDetailsScreen } from '../screens/client/ServiceDetailsScreen';
+import { UpcomingServicesScreen } from '../screens/client/UpcomingServicesScreen';
+import { CompletedServicesScreen } from '../screens/client/CompletedServicesScreen';
 import { ServiceCategoriesScreen } from '../screens/client/booking/ServiceCategoriesScreen';
 import { PlaceOrderScreen } from '../screens/client/booking/PlaceOrderScreen';
 import { SelectLocationScreen } from '../screens/client/booking/SelectLocationScreen';
@@ -37,6 +39,8 @@ const bookingScreens = (
     <Stack.Screen name="Payment" component={PaymentScreen} />
     <Stack.Screen name="TrackService" component={TrackingScreen} />
     <Stack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
+    <Stack.Screen name="UpcomingServices" component={UpcomingServicesScreen} />
+    <Stack.Screen name="CompletedServices" component={CompletedServicesScreen} />
   </>
 );
 
@@ -87,7 +91,17 @@ const ClientTabs = () => {
         })
       }
     >
-      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen
+        name="Home"
+        component={HomeStack}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            // Return to the home dashboard — don't restore a nested
+            // Notifications / booking screen left on this stack.
+            navigation.navigate('Home', { screen: 'HomeMain' });
+          },
+        })}
+      />
       <Tab.Screen
         name="Services"
         component={ServicesStack}

@@ -47,8 +47,13 @@ export const applySecurityMiddleware = (app: Express): void => {
 /** All `/api/*` routes (per IP). Razorpay webhook is registered before this middleware. */
 export const globalApiLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 120,
+  // Mobile clients poll notifications/tracking; 120/15m was far too low and blocked normal use.
+  max: Number(process.env.API_RATE_LIMIT_MAX) || 1000,
   message: 'Too many API requests. Please try again later.',
+  // Local/dev traffic (Expo + hot reload + polling) should not trip the production guard.
+  skip: () =>
+    process.env.NODE_ENV !== 'production' &&
+    process.env.ENABLE_API_RATE_LIMIT !== '1',
 });
 
 /** Unauthenticated auth POST endpoints: login, register, OTP verify, etc. */

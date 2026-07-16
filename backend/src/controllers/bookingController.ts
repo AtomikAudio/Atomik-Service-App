@@ -35,6 +35,10 @@ import {
   normalizeSlotDate,
   normalizeSlotTime,
 } from '../services/slotHoldService';
+import {
+  proposeRescheduleForBooking,
+  respondToRescheduleForBooking,
+} from '../services/rescheduleService';
 
 const generateBookingId = (): string => {
   const num = Math.floor(10000 + Math.random() * 90000);
@@ -863,6 +867,79 @@ export const getAllBookings = async (
       success: true,
       bookings: serializeBookingsForRole(bookings, 'admin'),
       pagination: { page, limit, total },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const populateBookingDetail = (bookingId: mongoose.Types.ObjectId) =>
+  Booking.findById(bookingId)
+    .populate('venueId', 'name area city address state pincode')
+    .populate('technicianId', 'name phone avatar')
+    .populate('clientId', 'name phone')
+    .populate('assignedByMasterId', 'name phone')
+    .populate('invoiceId');
+
+export const proposeReschedule = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = toObjectId(req.params.id);
+    await proposeRescheduleForBooking(bookingId.toString(), req.user!.id, req.user!.role, {
+      scheduledDate: String(req.body.scheduledDate),
+      scheduledTime: String(req.body.scheduledTime),
+      note: req.body.note,
+    });
+
+    const booking = await populateBookingDetail(bookingId);
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Reschedule proposed',
+      booking: serializeBookingForRole(booking, req.user!.role),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const respondToReschedule = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = toObjectId(req.params.id);
+    await respondToRescheduleForBooking(bookingId.toString(), {
+      id: req.user!.id,
+      role: req.user!.role,
+    }, {
+      action: req.body.action,
+      scheduledDate: req.body.scheduledDate,
+      scheduledTime: req.body.scheduledTime,
+      note: req.body.note,
+    });
+
+    const booking = await populateBookingDetail(bookingId);
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message:
+        req.body.action === 'accept'
+          ? 'Reschedule confirmed'
+          : 'Counter-proposal sent',
+      booking: serializeBookingForRole(booking, req.user!.role),
     });
   } catch (err) {
     next(err);
