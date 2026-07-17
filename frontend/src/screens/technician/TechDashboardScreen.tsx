@@ -75,11 +75,24 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const othersJobs = jobs.filter(
     (j) => getTechId(j) && getTechId(j) !== String(user?.id ?? '')
   );
-  const ongoingJobs = myJobs.filter(
+  const activeMine = myJobs.filter(
     (j) => !['completed', 'cancelled'].includes(j.status)
   );
+  const awaitingReschedule = activeMine.filter((j) =>
+    Boolean(j.reschedule?.status)
+  );
+  const ongoingJobs = activeMine.filter((j) => !j.reschedule?.status);
   const completedJobs = myJobs.filter((j) => j.status === 'completed');
 
+  const rescheduleHint = (job: Booking) => {
+    if (job.reschedule?.status === 'pending_client') {
+      return 'Waiting for client to confirm new time';
+    }
+    if (job.reschedule?.status === 'pending_technician') {
+      return 'Client proposed a new time — review on job details';
+    }
+    return 'Reschedule in progress';
+  };
   const renderJobHeader = (job: Booking, badgeLabel: string) => (
     <View style={styles.jobHeader}>
       <Text style={styles.jobType}>{job.serviceType}</Text>
@@ -182,7 +195,7 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
         ) : (
           <View style={styles.statsRow}>
             <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>{ongoingJobs.length}</Text>
+              <Text style={styles.statNum}>{activeMine.length}</Text>
               <Text style={styles.statLabel}>Ongoing Jobs</Text>
             </Card>
             <Card style={styles.statCard} padding={14}>
@@ -202,26 +215,6 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </>
         ) : null}
 
-        {!isMaster && openJobs.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Available Jobs</Text>
-            <Text style={styles.sectionHint}>
-              Open requests — accept or decline from the job screen.
-            </Text>
-            {openJobs.map((j) => renderJob(j, 'open'))}
-          </>
-        )}
-
-        {!isMaster && declinedJobs.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Declined by You</Text>
-            <Text style={styles.sectionHint}>
-              Still visible — open and tap Accept if you are available.
-            </Text>
-            {declinedJobs.map((j) => renderJob(j, 'declined'))}
-          </>
-        )}
-
         {!isMaster ? (
           <>
             <Text style={styles.sectionTitle}>Ongoing Jobs</Text>
@@ -230,10 +223,76 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
             ) : (
               ongoingJobs.map((j) => renderJob(j, 'mine'))
             )}
+
+            {awaitingReschedule.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Awaiting Reschedule</Text>
+                <Text style={styles.sectionHint}>
+                  Jobs with a proposed time change waiting to be confirmed.
+                </Text>
+                {awaitingReschedule.map((j) => (
+                  <PressableScale
+                    key={j._id}
+                    style={styles.jobCard}
+                    onPress={() =>
+                      navigation.navigate('JobDetail', { jobId: j._id })
+                    }
+                  >
+                    <View style={styles.jobContent}>
+                      {renderJobHeader(j, 'reschedule')}
+                      <Text style={styles.jobVenue}>{j.venueId?.name}</Text>
+                      <Text style={styles.rescheduleLine}>{rescheduleHint(j)}</Text>
+                      <Text style={styles.jobMeta}>
+                        #{j.bookingId} ·{' '}
+                        {formatBookingSchedule(j.scheduledDate, j.scheduledTime)}
+                      </Text>
+                    </View>
+                  </PressableScale>
+                ))}
+              </>
+            ) : null}
+
+            {openJobs.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Available Jobs</Text>
+                <Text style={styles.sectionHint}>
+                  Open requests — accept or decline from the job screen.
+                </Text>
+                {openJobs.map((j) => renderJob(j, 'open'))}
+              </>
+            ) : null}
+
+            {declinedJobs.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Declined by You</Text>
+                <Text style={styles.sectionHint}>
+                  Still visible — open and tap Accept if you are available.
+                </Text>
+                {declinedJobs.map((j) => renderJob(j, 'declined'))}
+              </>
+            ) : null}
+
+            {othersJobs.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Taken by Others</Text>
+                <Text style={styles.sectionHint}>
+                  These jobs were accepted by another technician.
+                </Text>
+                {othersJobs.map((j) => renderJob(j, 'other'))}
+              </>
+            ) : null}
+
+            {completedJobs.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Completed</Text>
+                {completedJobs.map((j) => renderJob(j, 'mine'))}
+              </>
+            ) : null}
           </>
         ) : (
           <>
-            {myJobs.filter((j) => !['completed', 'cancelled'].includes(j.status)).length > 0 ? (
+            {myJobs.filter((j) => !['completed', 'cancelled'].includes(j.status))
+              .length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>My Ongoing Jobs</Text>
                 {myJobs
@@ -247,23 +306,6 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
             ) : (
               othersJobs.map((j) => renderJob(j, 'other'))
             )}
-          </>
-        )}
-
-        {!isMaster && othersJobs.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Taken by Others</Text>
-            <Text style={styles.sectionHint}>
-              These jobs were accepted by another technician.
-            </Text>
-            {othersJobs.map((j) => renderJob(j, 'other'))}
-          </>
-        )}
-
-        {!isMaster && completedJobs.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Completed</Text>
-            {completedJobs.map((j) => renderJob(j, 'mine'))}
           </>
         )}
       </SafeScrollView>
@@ -402,6 +444,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_500Medium',
     fontSize: 12,
     color: COLORS.grayDark,
+    marginTop: 6,
+  },
+  rescheduleLine: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 12,
+    color: COLORS.red,
     marginTop: 6,
   },
   jobMeta: {

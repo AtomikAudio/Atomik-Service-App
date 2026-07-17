@@ -60,7 +60,11 @@ api.interceptors.response.use(
       error.response?.data?.message ||
       error.message ||
       'An unexpected error occurred';
-    const apiError = new Error(message) as Error & { retryAfter?: number };
+    const apiError = new Error(message) as Error & {
+      status?: number;
+      retryAfter?: number;
+    };
+    apiError.status = error.response?.status;
     if (typeof error.response?.data?.retryAfter === 'number') {
       apiError.retryAfter = error.response.data.retryAfter;
     }

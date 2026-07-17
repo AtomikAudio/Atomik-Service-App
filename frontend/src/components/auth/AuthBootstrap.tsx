@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { sessionRestoreFailed, restoreSession, logout } from '../../store/authSlice';
 import { setUnauthorizedHandler } from '../../services/api';
-import { purgeDemoSessionToken } from '../../services/tokenStore';
+import { getToken, purgeDemoSessionToken } from '../../services/tokenStore';
 import { authService } from '../../services/auth';
 import { warmupApi } from '../../services/apiWarmup';
 import { COLORS } from '../../constants/colors';
@@ -33,12 +33,28 @@ export const AuthBootstrap: React.FC<Props> = ({ children }) => {
         // users see the app immediately, then validate/refresh in the background.
         const cached = await authService.loadCachedSession();
         if (cached) {
-          dispatch(restoreSession(cached));
+          dispatch(
+            restoreSession({
+              user: cached.user,
+              token: cached.token,
+              isOnboarded: cached.isOnboarded,
+            })
+          );
           authService
             .loadStoredSession()
-            .then((fresh) => {
-              if (fresh) dispatch(restoreSession(fresh));
-              else dispatch(logout());
+            .then(async (fresh) => {
+              if (fresh) {
+                dispatch(
+                  restoreSession({
+                    user: fresh.user,
+                    token: fresh.token,
+                    isOnboarded: fresh.isOnboarded,
+                  })
+                );
+                return;
+              }
+              const token = await getToken();
+              if (!token) dispatch(logout());
             })
             .catch(() => {});
           return;
@@ -47,7 +63,13 @@ export const AuthBootstrap: React.FC<Props> = ({ children }) => {
         // No usable cache: validate any stored token, otherwise show login.
         const session = await authService.loadStoredSession();
         if (session) {
-          dispatch(restoreSession(session));
+          dispatch(
+            restoreSession({
+              user: session.user,
+              token: session.token,
+              isOnboarded: session.isOnboarded,
+            })
+          );
         } else {
           dispatch(sessionRestoreFailed());
         }

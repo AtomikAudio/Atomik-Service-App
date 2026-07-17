@@ -94,7 +94,13 @@ export const PhoneAuthScreen: React.FC<Props> = ({ navigation, route }) => {
         Alert.alert('Use Create Account', 'Client sign-up uses email and password on the main screen.');
         return;
       }
-      dispatch(setAuth({ user: data.user, token: data.token }));
+      dispatch(
+        setAuth({
+          user: data.user,
+          token: data.token,
+          isOnboarded: data.isOnboarded,
+        })
+      );
     } catch (err: any) {
       Alert.alert(
         isSignup ? 'Registration Failed' : 'Sign In Failed',

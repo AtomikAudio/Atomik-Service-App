@@ -3,8 +3,10 @@ import {
   clearToken,
   getToken,
   getCachedUser,
+  getOnboardedFlag,
   isDemoSessionToken,
   setCachedUser,
+  setOnboardedFlag,
   setToken,
 } from './tokenStore';
 import { getApiBaseUrl } from '../config/apiConfig';
@@ -104,6 +106,29 @@ export function isNetworkError(err: unknown): boolean {
   );
 }
 
+export function isAuthError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status === 401 || status === 403;
+}
+
+async function persistSession(data: LoginResponse): Promise<void> {
+  await setToken(data.token);
+  await setCachedUser(data.user);
+  if (data.user.role !== 'client') {
+    await setOnboardedFlag(true);
+  }
+}
+
+async function withOnboardingState(
+  data: LoginResponse
+): Promise<LoginResponse & { isOnboarded: boolean }> {
+  const onboarded = await getOnboardedFlag();
+  return {
+    ...data,
+    isOnboarded: data.user.role !== 'client' || onboarded === true,
+  };
+}
+
 export type OtpPurpose =
   | 'signup'
   | 'login'
@@ -112,7 +137,7 @@ export type OtpPurpose =
   | 'forgot_password';
 
 export const authService = {
-  async login(identifier: string, password: string): Promise<LoginResponse> {
+  async login(identifier: string, password: string): Promise<LoginResponse & { isOnboarded: boolean }> {
     const trimmed = identifier.trim();
 
     try {
@@ -121,13 +146,12 @@ export const authService = {
         password,
       })) as ApiAuthPayload;
       const data = unwrapAuthResponse(raw);
-      await setToken(data.token);
-      await setCachedUser(data.user);
-      return data;
+      await persistSession(data);
+      return withOnboardingState(data);
     } catch (err) {
       const offlineDemo = tryDemoLogin(trimmed, password);
       if (offlineDemo && isNetworkError(err)) {
-        return offlineDemo;
+        return withOnboardingState(offlineDemo);
       }
       throw err;
     }
@@ -211,7 +235,7 @@ export const authService = {
     phone: string;
     otp: string;
     email?: string;
-  }): Promise<LoginResponse> {
+  }): Promise<LoginResponse & { isOnboarded: boolean }> {
     const raw = (await api.post('/auth/register/technician', {
       name: payload.name,
       phone: payload.phone,
@@ -219,25 +243,23 @@ export const authService = {
       email: payload.email?.trim() || undefined,
     })) as ApiAuthPayload;
     const data = unwrapAuthResponse(raw);
-    await setToken(data.token);
-    await setCachedUser(data.user);
-    return data;
+    await persistSession(data);
+    return withOnboardingState(data);
   },
 
   async loginWithPhone(
     phone: string,
     otp: string,
     role: 'client' | 'technician' = 'client'
-  ): Promise<LoginResponse> {
+  ): Promise<LoginResponse & { isOnboarded: boolean }> {
     const raw = (await api.post('/auth/login/phone', {
       phone: phone.trim(),
       otp: otp.trim(),
       role,
     })) as ApiAuthPayload;
     const data = unwrapAuthResponse(raw);
-    await setToken(data.token);
-    await setCachedUser(data.user);
-    return data;
+    await persistSession(data);
+    return withOnboardingState(data);
   },
 
   async register(payload: {
@@ -246,7 +268,7 @@ export const authService = {
     password: string;
     otp: string;
     email?: string;
-  }): Promise<LoginResponse> {
+  }): Promise<LoginResponse & { isOnboarded: boolean }> {
     const normalizedEmail = payload.email?.trim().toLowerCase();
     try {
       const raw = (await api.post('/auth/register', {
@@ -257,9 +279,8 @@ export const authService = {
         email: normalizedEmail || undefined,
       })) as ApiAuthPayload;
       const data = unwrapAuthResponse(raw);
-      await setToken(data.token);
-      await setCachedUser(data.user);
-      return data;
+      await persistSession(data);
+      return withOnboardingState(data);
     } catch (err) {
       if (isDemoAuthEnabled() && isNetworkError(err)) {
         const demo: LoginResponse = {
@@ -272,7 +293,7 @@ export const authService = {
           },
           token: 'demo-token-client',
         };
-        return demo;
+        return withOnboardingState(demo);
       }
       throw err;
     }
@@ -389,33 +410,62 @@ export const authService = {
    * token instantly so the app can render without waiting on the API. Use
    * loadStoredSession() afterwards to validate/refresh in the background.
    */
-  async loadCachedSession(): Promise<LoginResponse | null> {
+  async loadCachedSession(): Promise<
+    (LoginResponse & { isOnboarded: boolean }) | null
+  > {
     const token = await getToken();
     if (!token || isDemoSessionToken(token)) {
       return null;
     }
     const cached = await getCachedUser<AuthUser>();
     if (!cached) return null;
-    return { user: cached, token };
+    const onboarded = await getOnboardedFlag();
+    return {
+      user: cached,
+      token,
+      isOnboarded: onboarded ?? cached.role !== 'client',
+    };
   },
 
-  async loadStoredSession(): Promise<LoginResponse | null> {
+  async loadStoredSession(): Promise<
+    (LoginResponse & { isOnboarded: boolean }) | null
+  > {
     const token = await getToken();
     if (!token || isDemoSessionToken(token)) {
       await clearToken();
       return null;
     }
 
+    const cached = await getCachedUser<AuthUser>();
+    const onboarded = await getOnboardedFlag();
+
     try {
       const user = await this.getCurrentUser();
       await setCachedUser(user);
-      return { user, token };
+      return {
+        user,
+        token,
+        isOnboarded: onboarded ?? user.role !== 'client',
+      };
     } catch (err) {
-      const cached = await getCachedUser<AuthUser>();
-      if (cached && isNetworkError(err)) {
-        return { user: cached, token };
+      if (cached && (isNetworkError(err) || !isAuthError(err))) {
+        return {
+          user: cached,
+          token,
+          isOnboarded: onboarded ?? cached.role !== 'client',
+        };
       }
-      // 401/expired or no cache → require a fresh login.
+      if (isAuthError(err)) {
+        await clearToken();
+        return null;
+      }
+      if (cached) {
+        return {
+          user: cached,
+          token,
+          isOnboarded: onboarded ?? cached.role !== 'client',
+        };
+      }
       await clearToken();
       return null;
     }

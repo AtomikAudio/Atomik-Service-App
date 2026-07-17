@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { Notification } from '../models/Notification';
+import { User } from '../models/User';
+import { sendExpoPushToTokens } from '../services/expoPush';
 
 export const resolveUserId = (
   ref:
@@ -33,14 +35,25 @@ export const notifyClientBooking = async (
   const userId = resolveUserId(booking.clientId);
   if (!userId) return;
 
+  const data = { bookingId: booking._id };
+
   await Notification.create({
     userId,
     title: payload.title,
     body: payload.body,
     type: payload.type ?? 'info',
     category: 'booking',
-    data: { bookingId: booking._id },
+    data,
   });
+
+  const user = await User.findById(userId).select('fcmToken isActive');
+  if (user?.isActive && user.fcmToken) {
+    await sendExpoPushToTokens([user.fcmToken], {
+      title: payload.title,
+      body: payload.body,
+      data,
+    });
+  }
 };
 
 export const technicianContactLabel = (tech?: {

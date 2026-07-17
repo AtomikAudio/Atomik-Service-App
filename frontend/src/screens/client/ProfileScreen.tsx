@@ -20,6 +20,7 @@ import { logout } from '../../store/authSlice';
 import { authService } from '../../services/auth';
 import { bookingService } from '../../services/bookings';
 import { venueService } from '../../services/venues';
+import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
 import { navigateProfileScreen } from '../../navigation/profileNavigation';
 import type { ProfileScreenName } from '../../navigation/profileScreens';
 
@@ -52,19 +53,50 @@ interface Props {
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const dispatch = useDispatch();
   const user = useSelector((state: any) => state.auth.user);
-  const [stats, setStats] = React.useState({ services: 0, venues: 0 });
+  const [stats, setStats] = React.useState({
+    services: 0,
+    venues: 0,
+    past: 0,
+    upcoming: 0,
+  });
+
+  const roleLabel = (user?.role ?? 'client').toUpperCase();
+  const isAdmin = user?.role === 'admin';
+  const isTechnician =
+    user?.role === 'technician' || user?.role === 'master_technician';
 
   useFocusEffect(
     React.useCallback(() => {
       if (user?.role === 'admin') return;
+      if (isTechnician) {
+        bookingService
+          .getMyBookings({ limit: 50 })
+          .then((bookings) => {
+            const myId = String(user?.id ?? '');
+            const mine = bookings.filter(
+              (b) => resolveAssignedTechnicianId(b) === myId
+            );
+            const past = mine.filter((b) => b.status === 'completed').length;
+            const upcoming = mine.filter(
+              (b) => !['completed', 'cancelled'].includes(b.status)
+            ).length;
+            setStats({ services: past, venues: 0, past, upcoming });
+          })
+          .catch(() => {});
+        return;
+      }
       Promise.all([bookingService.getMyBookings(), venueService.getMyVenues()])
-        .then(([b, v]) => setStats({ services: b.length, venues: v.length }))
+        .then(([b, v]) =>
+          setStats({
+            services: b.length,
+            venues: v.length,
+            past: 0,
+            upcoming: 0,
+          })
+        )
         .catch(() => {});
-    }, [user?.role])
+    }, [user?.role, user?.id, isTechnician])
   );
-
-  const roleLabel = (user?.role ?? 'client').toUpperCase();
-  const isAdmin = user?.role === 'admin';
 
   const goTo = (screen: ProfileScreenName) => navigateProfileScreen(navigation, screen);
 
@@ -75,6 +107,35 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
     goTo('SavedVenues');
+  };
+
+  const openPastServices = () => {
+    let parent = navigation.getParent?.();
+    while (parent) {
+      const names = parent.getState?.()?.routeNames ?? [];
+      if (names.includes('TechPastServices')) {
+        parent.navigate('TechPastServices');
+        return;
+      }
+      parent = parent.getParent?.();
+    }
+    navigation.navigate('TechPastServices');
+  };
+
+  const openUpcomingJobs = () => {
+    let parent = navigation.getParent?.();
+    while (parent) {
+      const names = parent.getState?.()?.routeNames ?? [];
+      if (names.includes('TechTabs')) {
+        parent.navigate('TechTabs', {
+          screen: 'Jobs',
+          params: { screen: 'TechDashboard' },
+        });
+        return;
+      }
+      parent = parent.getParent?.();
+    }
+    navigation.navigate('Jobs', { screen: 'TechDashboard' });
   };
 
   const handleLogout = () => {
@@ -122,24 +183,66 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Stats */}
         <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{stats.services}</Text>
-            <Text style={styles.statLabel}>Services</Text>
-          </View>
-          {!isAdmin && (
+          {isTechnician ? (
             <>
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={openPastServices}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.statNum}>{stats.past}</Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
+                  Past Services
+                </Text>
+              </TouchableOpacity>
               <View style={styles.statDivider} />
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={openUpcomingJobs}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.statNum}>{stats.upcoming}</Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
+                  Upcoming Services
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
               <View style={styles.statItem}>
-                <Text style={styles.statNum}>{stats.venues}</Text>
-                <Text style={styles.statLabel}>Venues</Text>
+                <Text style={styles.statNum}>{stats.services}</Text>
+                <Text style={styles.statLabel}>Services</Text>
               </View>
+              {!isAdmin && (
+                <>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNum}>{stats.venues}</Text>
+                    <Text style={styles.statLabel}>Venues</Text>
+                  </View>
+                </>
+              )}
+              {isAdmin && (
+                <>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNum}>{roleLabel}</Text>
+                    <Text style={styles.statLabel}>Access</Text>
+                  </View>
+                </>
+              )}
             </>
           )}
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{isAdmin ? roleLabel : '—'}</Text>
-            <Text style={styles.statLabel}>{isAdmin ? 'Access' : 'Rating'}</Text>
-          </View>
         </View>
 
         {/* Menu */}
@@ -150,11 +253,19 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => goTo('EditProfile')}
           />
           <View style={styles.menuDivider} />
-          <MenuItem
-            icon="location-outline"
-            label={isAdmin ? 'Manage Venues' : 'Saved Venues'}
-            onPress={openSavedVenues}
-          />
+          {isTechnician ? (
+            <MenuItem
+              icon="time-outline"
+              label="Past Services"
+              onPress={openPastServices}
+            />
+          ) : (
+            <MenuItem
+              icon="location-outline"
+              label={isAdmin ? 'Manage Venues' : 'Saved Venues'}
+              onPress={openSavedVenues}
+            />
+          )}
           <View style={styles.menuDivider} />
           <MenuItem
             icon="notifications-outline"
@@ -276,6 +387,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 11,
     color: COLORS.gray,
+  },
+  statLabelWide: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 11,
+    color: COLORS.gray,
+    textAlign: 'center',
+    paddingHorizontal: 4,
   },
   menuCard: {
     overflow: 'hidden',

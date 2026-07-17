@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'atomik_token';
 const USER_KEY = 'atomik_user';
+const ONBOARDED_KEY = 'atomik_onboarded';
 
 let secureStoreAvailable: boolean | null = null;
 
@@ -88,6 +89,33 @@ export async function getCachedUser<T = unknown>(): Promise<T | null> {
 export async function clearCachedUser(): Promise<void> {
   try {
     await AsyncStorage.removeItem(USER_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Client onboarding completion — persisted so reopening the app skips onboarding. */
+export async function setOnboardedFlag(value: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ONBOARDED_KEY, value ? '1' : '0');
+  } catch {
+    // ignore
+  }
+}
+
+export async function getOnboardedFlag(): Promise<boolean | null> {
+  try {
+    const raw = await AsyncStorage.getItem(ONBOARDED_KEY);
+    if (raw === null) return null;
+    return raw === '1';
+  } catch {
+    return null;
+  }
+}
+
+export async function clearOnboardedFlag(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(ONBOARDED_KEY);
   } catch {
     // ignore
   }

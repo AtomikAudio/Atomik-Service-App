@@ -85,6 +85,14 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
 
   const isGeneralVisit =
     draft.categoryIds.length === 1 && draft.categoryIds[0] === 'general-visit';
+  const isGeneralService =
+    draft.categoryIds.length === 1 && draft.categoryIds[0] === 'general-service';
+  const hideCategoryChips = isGeneralVisit || isGeneralService;
+  const headerTitle = isGeneralVisit
+    ? 'General Visit'
+    : isGeneralService
+      ? 'General Service'
+      : 'Place order';
 
   const placeOrder = async () => {
     if (!canConfirm || !draft.venueId) return;
@@ -134,7 +142,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <BookingFlowHeader
-        title={isGeneralVisit ? 'General Visit' : 'Place order'}
+        title={headerTitle}
         onBack={() => navigation.goBack()}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -149,7 +157,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : null}
 
-        {!isGeneralVisit ? (
+        {!hideCategoryChips ? (
           <>
             <Text style={styles.sectionLabel}>CATEGORY</Text>
             <View style={styles.categoryRow}>

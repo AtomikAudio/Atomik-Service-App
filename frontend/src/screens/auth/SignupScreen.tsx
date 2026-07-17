@@ -75,7 +75,13 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
         password,
         otp,
       });
-      dispatch(setAuth({ user: data.user, token: data.token }));
+      dispatch(
+        setAuth({
+          user: data.user,
+          token: data.token,
+          isOnboarded: data.isOnboarded,
+        })
+      );
     } catch (err: any) {
       Alert.alert('Registration Failed', err.message || 'Please try again');
     } finally {

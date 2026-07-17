@@ -16,6 +16,7 @@ import { Button } from '../../components/common/Button';
 import { COLORS } from '../../constants/colors';
 import { useDispatch } from 'react-redux';
 import { setOnboarded } from '../../store/authSlice';
+import { setOnboardedFlag } from '../../services/tokenStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -94,6 +95,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleDone = () => {
+    void setOnboardedFlag(true);
     dispatch(setOnboarded(true));
   };
 

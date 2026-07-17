@@ -1,18 +1,22 @@
 import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import mongoose from 'mongoose';
+import { sendExpoPushToTokens } from '../services/expoPush';
+
+type NotifyPayload = {
+  title: string;
+  body: string;
+  type?: 'info' | 'warning' | 'success' | 'error';
+  category?: 'booking' | 'payment' | 'technician' | 'system';
+  data?: Record<string, unknown>;
+};
 
 export const notifyUsers = async (
   userIds: mongoose.Types.ObjectId[],
-  payload: {
-    title: string;
-    body: string;
-    type?: 'info' | 'warning' | 'success' | 'error';
-    category?: 'booking' | 'payment' | 'technician' | 'system';
-    data?: Record<string, unknown>;
-  }
+  payload: NotifyPayload
 ) => {
   if (userIds.length === 0) return;
+
   await Notification.insertMany(
     userIds.map((userId) => ({
       userId,
@@ -24,11 +28,26 @@ export const notifyUsers = async (
       isRead: false,
     }))
   );
+
+  const users = await User.find({
+    _id: { $in: userIds },
+    isActive: true,
+    fcmToken: { $exists: true, $nin: [null, ''] },
+  }).select('fcmToken');
+
+  await sendExpoPushToTokens(
+    users.map((u) => u.fcmToken),
+    {
+      title: payload.title,
+      body: payload.body,
+      data: payload.data,
+    }
+  );
 };
 
 export const notifyByRoles = async (
   roles: ('admin' | 'technician' | 'master_technician' | 'client')[],
-  payload: Parameters<typeof notifyUsers>[1]
+  payload: NotifyPayload
 ) => {
   const users = await User.find({
     role: { $in: roles },

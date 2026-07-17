@@ -51,7 +51,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
     try {
       const data = await authService.login(identifier, password);
-      dispatch(setAuth({ user: data.user, token: data.token }));
+      dispatch(
+        setAuth({
+          user: data.user,
+          token: data.token,
+          isOnboarded: data.isOnboarded,
+        })
+      );
     } catch (err: any) {
       Alert.alert('Login Failed', err.message || 'Invalid credentials');
     } finally {

@@ -2,7 +2,9 @@ import mongoose from 'mongoose';
 import { Invoice, IInvoice } from '../models/Invoice';
 import { Booking } from '../models/Booking';
 import { Notification } from '../models/Notification';
+import { User } from '../models/User';
 import { notifyByRoles, notifyUsers } from '../utils/notifyUsers';
+import { sendExpoPushToTokens } from './expoPush';
 import { toObjectId } from '../utils/mongoQuery';
 
 export interface SettlePaymentParams {
@@ -129,18 +131,35 @@ export async function settleInvoicePayment(
     }
   }
 
+  const paymentTitle = 'Payment Successful';
+  const paymentBody = `Payment of ₹${paidNow.toLocaleString('en-IN')} for invoice ${invoice.invoiceNumber} confirmed${couponNote}.`;
+  const paymentData = {
+    invoiceId: invoice._id,
+    bookingId: invoice.bookingId,
+  };
+
   await Notification.create({
     userId: notifyUserId,
-    title: 'Payment Successful',
-    body: `Payment of ₹${paidNow.toLocaleString('en-IN')} for invoice ${invoice.invoiceNumber} confirmed${couponNote}.`,
+    title: paymentTitle,
+    body: paymentBody,
     type: 'success',
     category: 'payment',
+    data: paymentData,
   });
+
+  const payer = await User.findById(notifyUserId).select('fcmToken isActive');
+  if (payer?.isActive && payer.fcmToken) {
+    await sendExpoPushToTokens([payer.fcmToken], {
+      title: paymentTitle,
+      body: paymentBody,
+      data: paymentData,
+    });
+  }
 
   const bookingRef = booking?.bookingId
     ? `booking ${booking.bookingId}`
     : `invoice ${invoice.invoiceNumber}`;
-  const notificationData = { invoiceId: invoice._id, bookingId: invoice.bookingId };
+  const notificationData = paymentData;
 
   if (isExtraPartsPayment) {
     // Extra parts payment: notify admin, master technician, and the assigned technician.

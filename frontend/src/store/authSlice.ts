@@ -31,12 +31,20 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    setAuth: (state, action: PayloadAction<{ user: User; token: string }>) => {
+    setAuth: (
+      state,
+      action: PayloadAction<{
+        user: User;
+        token: string;
+        isOnboarded?: boolean;
+      }>
+    ) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = true;
-      // Clients see onboarding; technician and admin go straight to their dashboard
-      state.isOnboarded = action.payload.user.role !== 'client';
+      state.isOnboarded =
+        action.payload.isOnboarded ??
+        action.payload.user.role !== 'client';
     },
     setOnboarded: (state, action: PayloadAction<boolean>) => {
       state.isOnboarded = action.payload;
@@ -56,13 +64,18 @@ const authSlice = createSlice({
     },
     restoreSession: (
       state,
-      action: PayloadAction<{ user: User; token: string }>
+      action: PayloadAction<{
+        user: User;
+        token: string;
+        isOnboarded?: boolean;
+      }>
     ) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = true;
-      // Returning user with a persisted session has already onboarded.
-      state.isOnboarded = true;
+      state.isOnboarded =
+        action.payload.isOnboarded ??
+        action.payload.user.role !== 'client';
       state.initializing = false;
     },
     sessionRestoreFailed: (state) => {

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TechDashboardScreen } from '../screens/technician/TechDashboardScreen';
 import { JobDetailScreen } from '../screens/technician/JobDetailScreen';
 import { MasterAssignScreen } from '../screens/technician/MasterAssignScreen';
+import { TechPastServicesScreen } from '../screens/technician/TechPastServicesScreen';
 import { NotificationsScreen } from '../screens/client/NotificationsScreen';
 import { ProfileScreen } from '../screens/client/ProfileScreen';
 import { defaultStackOptions } from './screenOptions';
@@ -74,6 +75,11 @@ export const TechNavigator: React.FC = () => (
       component={TechTabs}
       options={{ headerShown: false }}
     />
+    <RootStack.Screen
+      name="TechPastServices"
+      component={TechPastServicesScreen}
+    />
+    <RootStack.Screen name="JobDetail" component={JobDetailScreen} />
     {PROFILE_SCREEN_NAMES.map((name) => (
       <RootStack.Screen
         key={name}

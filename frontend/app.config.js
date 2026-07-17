@@ -97,6 +97,14 @@ module.exports = {
       'expo-font',
       'expo-secure-store',
       [
+        'expo-notifications',
+        {
+          icon: './assets/icon.png',
+          color: '#8e302f',
+          defaultChannel: 'default',
+        },
+      ],
+      [
         'expo-splash-screen',
         {
           backgroundColor: '#231f20',
