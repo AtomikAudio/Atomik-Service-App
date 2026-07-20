@@ -48,7 +48,7 @@ function page(title: string, body: string): string {
   <div class="wrap">
     <header>
       <div class="brand">ATOMIK<span>•</span> Audio</div>
-      <div class="tag">Precision Audio Service Infrastructure</div>
+      <div class="tag">Audio Engineering and Design<br/>Service Infrastructure</div>
     </header>
     ${body}
     <footer>

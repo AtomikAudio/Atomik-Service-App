@@ -189,6 +189,23 @@ export async function settleInvoicePayment(
       category: 'payment',
       data: notificationData,
     });
+
+    // Only after payment: technicians can see and claim the job.
+    const bookingDoc = invoice.bookingId
+      ? await Booking.findById(invoice.bookingId)
+          .populate('venueId', 'name')
+          .select('bookingId serviceType scheduledDate scheduledTime venueId')
+      : null;
+    const venueName =
+      (bookingDoc?.venueId as { name?: string } | undefined)?.name ?? 'venue';
+    const jobRef = booking?.bookingId ?? bookingDoc?.bookingId ?? invoice.invoiceNumber;
+    await notifyByRoles(['technician', 'master_technician'], {
+      title: 'New job available',
+      body: `${jobRef} · paid · ready at ${venueName}. Accept or await assignment.`,
+      type: 'info',
+      category: 'booking',
+      data: notificationData,
+    });
   }
 
   return invoice;

@@ -75,6 +75,7 @@ async function main() {
 
   const serviceDefault =
     serviceCreds.find((bc) => bc.isDefault) ?? serviceCreds[0];
+
   if (!serviceDefault) {
     throw new Error(`No build credentials for ${SERVICE_PACKAGE}`);
   }

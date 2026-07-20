@@ -1,4 +1,4 @@
-# ATOMIK — Precision Audio Service Infrastructure
+# ATOMIK — Audio Engineering and Design · Service Infrastructure
 
 Premium audio service management platform for Atomik Audio.
 
@@ -163,4 +163,4 @@ npx expo start           # scan QR with Expo Go
 
 ## Brand
 
-ATOMIK• — Precision Audio Service Infrastructure
+ATOMIK• — Audio Engineering and Design · Service Infrastructure

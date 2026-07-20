@@ -26,7 +26,13 @@ const otpSchema = new Schema<IOtpVerification>(
     appwriteUserId: String,
     purpose: {
       type: String,
-      enum: ['signup', 'login', 'technician_signup', 'technician_login'],
+      enum: [
+        'signup',
+        'login',
+        'technician_signup',
+        'technician_login',
+        'forgot_password',
+      ],
     },
     expiresAt: {
       type: Date,

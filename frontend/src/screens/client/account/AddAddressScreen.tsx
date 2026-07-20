@@ -9,25 +9,31 @@ import {
 import { AccountScreenLayout } from '../../../components/common/AccountScreenLayout';
 import { Input } from '../../../components/common/Input';
 import { Button } from '../../../components/common/Button';
-import { venueService } from '../../../services/venues';
+import { venueService, Venue } from '../../../services/venues';
 import { COLORS } from '../../../constants/colors';
 
 const ADDRESS_LABELS = ['Home', 'Office', 'Venue', 'Other'];
 
 interface Props {
   navigation: any;
+  route?: { params?: { venue?: Venue } };
 }
 
-export const AddAddressScreen: React.FC<Props> = ({ navigation }) => {
+export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
+  const editing = route?.params?.venue;
   const [saving, setSaving] = useState(false);
-  const [saveAs, setSaveAs] = useState('Home');
-  const [line1, setLine1] = useState('');
+  const [saveAs, setSaveAs] = useState(() => {
+    const name = editing?.name?.trim();
+    if (name && ADDRESS_LABELS.includes(name)) return name;
+    return name || 'Home';
+  });
+  const [line1, setLine1] = useState(editing?.address ?? '');
   const [line2, setLine2] = useState('');
-  const [locality, setLocality] = useState('');
+  const [locality, setLocality] = useState(editing?.area ?? '');
   const [landmark, setLandmark] = useState('');
-  const [city, setCity] = useState('Bengaluru');
-  const [state, setState] = useState('Karnataka');
-  const [pincode, setPincode] = useState('');
+  const [city, setCity] = useState(editing?.city ?? 'Bengaluru');
+  const [state, setState] = useState(editing?.state ?? 'Karnataka');
+  const [pincode, setPincode] = useState(editing?.pincode ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
@@ -48,17 +54,25 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation }) => {
       const addressParts = [line1.trim(), line2.trim(), landmark.trim()].filter(
         Boolean
       );
-      await venueService.createVenue({
+      const payload = {
         name: saveAs,
         address: addressParts.join(', '),
         area: locality.trim(),
         city: city.trim(),
         state: state.trim(),
         pincode: pincode.trim(),
-      });
-      Alert.alert('Saved', 'Address added to your saved venues.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      };
+      if (editing?._id) {
+        await venueService.updateVenue(editing._id, payload);
+        Alert.alert('Saved', 'Address updated.', [
+          { text: 'OK', onPress: () => navigation.pop(2) },
+        ]);
+      } else {
+        await venueService.createVenue(payload);
+        Alert.alert('Saved', 'Address added to your saved venues.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Could not save address';
@@ -69,7 +83,7 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <AccountScreenLayout title="Add address" keyboard>
+    <AccountScreenLayout title={editing ? 'Edit address' : 'Add address'} keyboard>
       <Text style={styles.sectionLabel}>SAVE AS</Text>
       <View style={styles.chipRow}>
         {ADDRESS_LABELS.map((label) => (
@@ -148,7 +162,7 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation }) => {
       />
 
       <Button
-        label="SAVE ADDRESS"
+        label={editing ? 'UPDATE ADDRESS' : 'SAVE ADDRESS'}
         onPress={saveAddress}
         loading={saving}
         style={styles.saveBtn}

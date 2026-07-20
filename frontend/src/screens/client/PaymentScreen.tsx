@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Modal,
   ActivityIndicator,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Header } from '../../components/common/Header';
@@ -24,8 +26,17 @@ import {
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
-import { applyLocalCoupon } from '../../utils/coupons';
+import { applyLocalCoupon, normalizeCouponCode } from '../../utils/coupons';
+import { formatRateLimitMessage } from '../../utils/rateLimitMessage';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../../components/common/ThemedConfirmModal';
+import { formatBookingSchedule } from '../../utils/schedule';
+import { formatServiceTypeLabel } from '../../utils/bookingDisplay';
+import { useBookingDraft } from '../../context/BookingDraftContext';
 import { COLORS } from '../../constants/colors';
+import { keyboardBehavior } from '../../utils/layout';
 
 interface Props {
   navigation: any;
@@ -107,7 +118,9 @@ type InvoiceState = {
 };
 
 export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { invoiceId, bookingId, serviceType, date, time, payFor } = route.params || {};
+  const { invoiceId, bookingId, serviceType, date, time, payFor, fromBookingFlow } =
+    route.params || {};
+  const { resetDraft } = useBookingDraft();
   const [loading, setLoading] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceState | null>(null);
   const [sparePartsLines, setSparePartsLines] = useState<SparePartLine[]>([]);
@@ -123,6 +136,29 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     label: string;
   } | null>(null);
   const [couponError, setCouponError] = useState('');
+  const [scheduleLabel, setScheduleLabel] = useState(
+    [date, time].filter(Boolean).join(' · ') || ''
+  );
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
+    onClose?: () => void;
+  } | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const couponOffsetY = useRef(0);
+
+  const scrollCouponIntoView = useCallback(() => {
+    const y = Math.max(0, couponOffsetY.current - 20);
+    // Wait for keyboard / layout adjust before scrolling.
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y, animated: true });
+    });
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y, animated: true });
+    }, 280);
+  }, []);
 
   useEffect(() => {
     if (!invoiceId) return;
@@ -147,20 +183,31 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         try {
           const b = await bookingService.getBookingById(bookingId);
           setSparePartsLines(b.spareParts ?? []);
+          const formatted = formatBookingSchedule(
+            b.scheduledDate,
+            b.scheduledTime
+          );
+          if (formatted) {
+            setScheduleLabel(formatted);
+          } else if (date || time) {
+            setScheduleLabel(
+              formatBookingSchedule(String(date ?? ''), String(time ?? '')) ||
+                [date, time].filter(Boolean).join(' · ')
+            );
+          }
         } catch {
           setSparePartsLines([]);
         }
+      } else if (date || time) {
+        setScheduleLabel(
+          formatBookingSchedule(String(date ?? ''), String(time ?? '')) ||
+            [date, time].filter(Boolean).join(' · ')
+        );
       }
     })();
   }, [invoiceId, bookingId]);
 
-  const serviceLabel =
-    {
-      general: 'General Service',
-      inspection: 'Inspection',
-      installation: 'Installation',
-      emergency: 'Emergency Visit',
-    }[serviceType as string] ?? 'Service';
+  const serviceLabel = formatServiceTypeLabel(serviceType);
 
   const isExtraParts =
     payFor === 'extra_parts' ||
@@ -212,11 +259,37 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     }
     setLoading(true);
     try {
+      const couponCode = appliedCoupon
+        ? normalizeCouponCode(appliedCoupon.couponCode)
+        : undefined;
+      const expectedPaise = Math.round(amountToPay * 100);
+
       const orderData = await paymentService.createOrder(
         invoiceId,
         isExtraParts ? 'extra_parts' : 'full',
-        appliedCoupon?.couponCode
+        couponCode
       );
+
+      const orderPaise = Number(orderData.order?.amount);
+      if (
+        Number.isFinite(orderPaise) &&
+        Number.isFinite(expectedPaise) &&
+        Math.abs(orderPaise - expectedPaise) > 1
+      ) {
+        Alert.alert(
+          'Amount mismatch',
+          `Checkout amount (₹${(orderPaise / 100).toFixed(2)}) does not match the discounted total (₹${amountToPay.toFixed(2)}). Please remove and re-apply the coupon, then try again.`
+        );
+        return;
+      }
+
+      if (couponCode && !orderData.coupon) {
+        Alert.alert(
+          'Coupon not applied',
+          'The coupon was not applied to the payment order. Please try again.'
+        );
+        return;
+      }
 
       if (orderData.demo && orderData.demoPayment) {
         await paymentService.verifyPayment({
@@ -225,6 +298,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           razorpay_payment_id: orderData.demoPayment.paymentId,
           razorpay_signature: orderData.demoPayment.signature,
         });
+        resetDraft();
         Alert.alert(
           'Payment Successful',
           isExtraParts
@@ -262,7 +336,10 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       );
       setWebviewVisible(true);
     } catch (e: any) {
-      Alert.alert('Payment Failed', e.message || 'Could not start payment');
+      Alert.alert(
+        e?.status === 429 ? 'Too many requests' : 'Payment Failed',
+        formatRateLimitMessage(e, 'Could not start payment. Please try again later.')
+      );
     } finally {
       setLoading(false);
     }
@@ -285,6 +362,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           razorpay_payment_id: data.razorpay_payment_id,
           razorpay_signature: data.razorpay_signature,
         });
+        resetDraft();
         Alert.alert(
           'Payment Successful',
           isExtraParts
@@ -300,7 +378,10 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         );
       }
     } catch (e: any) {
-      Alert.alert('Verification failed', e.message);
+      Alert.alert(
+        e?.status === 429 ? 'Too many requests' : 'Verification failed',
+        formatRateLimitMessage(e, e?.message || 'Verification failed')
+      );
     } finally {
       setLoading(false);
     }
@@ -308,57 +389,99 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const cancelBooking = () => {
     if (!bookingId) {
-      Alert.alert('Unavailable', 'Could not find this booking to cancel.');
+      setResultAlert({
+        title: 'Unavailable',
+        message: 'Could not find this booking to cancel.',
+        icon: 'alert-circle-outline',
+      });
       return;
     }
-    Alert.alert(
-      'Cancel booking?',
-      'Cancel this booking before payment? This cannot be undone.',
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Cancel booking',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await bookingService.cancelBooking(
-                bookingId,
-                'Cancelled by client before payment'
-              );
-              Alert.alert('Cancelled', 'Your booking has been cancelled.', [
-                {
-                  text: 'OK',
-                  onPress: () =>
-                    navigation.navigate('ServiceCategories', { reset: true }),
-                },
-              ]);
-            } catch (e: unknown) {
-              const msg =
-                e instanceof Error ? e.message : 'Could not cancel booking';
-              Alert.alert('Failed', msg);
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+    setCancelConfirmOpen(true);
+  };
+
+  const confirmCancelBooking = async () => {
+    if (!bookingId) return;
+    setLoading(true);
+    try {
+      await bookingService.cancelBooking(
+        bookingId,
+        'Cancelled by client before payment'
+      );
+      if (fromBookingFlow) resetDraft();
+      setCancelConfirmOpen(false);
+      setResultAlert({
+        title: 'Cancelled',
+        message: 'Your booking has been cancelled.',
+        icon: 'checkmark-circle-outline',
+        onClose: () =>
+          navigation.navigate('ServiceCategories', { reset: true }),
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not cancel booking';
+      if (/already cancelled|cannot cancel a cancelled/i.test(msg)) {
+        if (fromBookingFlow) resetDraft();
+        setCancelConfirmOpen(false);
+        setResultAlert({
+          title: 'Cancelled',
+          message: 'This booking is already cancelled.',
+          icon: 'checkmark-circle-outline',
+          onClose: () =>
+            navigation.navigate('ServiceCategories', { reset: true }),
+        });
+      } else {
+        setResultAlert({
+          title: 'Could not cancel',
+          message: msg,
+          icon: 'alert-circle-outline',
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      <Header showBack showLogo />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <Header
+        showBack
+        showLogo
+        onBackPress={
+          fromBookingFlow ? () => navigation.goBack() : undefined
+        }
+      />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={keyboardBehavior}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.flex}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+        >
         <Text style={styles.title}>
           {isExtraParts ? 'Pay extra parts' : 'Payment'}
         </Text>
-        <Card style={styles.bookingCard} padding={18}>
+        {!isExtraParts ? (
+          <View style={styles.confirmNotice}>
+            <Text style={styles.confirmNoticeTitle}>Payment required</Text>
+            <Text style={styles.confirmNoticeBody}>
+              Complete payment to confirm your booking. Technicians are assigned
+              only after payment is successful.
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.bookingCard}>
           <Text style={styles.bookingService}>{serviceLabel}</Text>
           <Text style={styles.bookingDate}>
-            {date || '—'} • {time || '—'}
+            {scheduleLabel || 'Schedule details will appear here'}
           </Text>
-        </Card>
+        </View>
         {invoice && (
           <Card style={styles.billCard} padding={18}>
             <Text style={styles.billTitle}>
@@ -437,97 +560,105 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         )}
 
         {baseAmountToPay > 0 ? (
-          <Card style={styles.couponCard} padding={18}>
-            <Text style={styles.billTitle}>Apply coupon</Text>
-            {appliedCoupon ? (
-              <View style={styles.couponAppliedBox}>
-                <View style={styles.couponAppliedTextWrap}>
-                  <Text style={styles.couponAppliedCode}>
-                    {appliedCoupon.couponCode} applied
-                  </Text>
-                  <Text style={styles.couponAppliedLabel}>
-                    {appliedCoupon.label} · save{' '}
-                    {formatINR(appliedCoupon.discountAmount)}
-                  </Text>
+          <View
+            onLayout={(e) => {
+              couponOffsetY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <Card style={styles.couponCard} padding={18}>
+              <Text style={styles.billTitle}>Apply coupon</Text>
+              {appliedCoupon ? (
+                <View style={styles.couponAppliedBox}>
+                  <View style={styles.couponAppliedTextWrap}>
+                    <Text style={styles.couponAppliedCode}>
+                      {appliedCoupon.couponCode} applied
+                    </Text>
+                    <Text style={styles.couponAppliedLabel}>
+                      {appliedCoupon.label} · save{' '}
+                      {formatINR(appliedCoupon.discountAmount)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={removeCoupon} hitSlop={10}>
+                    <Text style={styles.couponRemove}>REMOVE</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={removeCoupon} hitSlop={10}>
-                  <Text style={styles.couponRemove}>REMOVE</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={styles.couponRow}>
-                  <View style={styles.couponInputWrap}>
-                    <Input
-                      placeholder="Enter coupon code"
-                      value={couponInput}
-                      onChangeText={(text) => {
-                        setCouponInput(text);
-                        if (couponError) setCouponError('');
-                      }}
-                      autoCapitalize="characters"
-                      error={couponError || undefined}
+              ) : (
+                <>
+                  <View style={styles.couponRow}>
+                    <View style={styles.couponInputWrap}>
+                      <Input
+                        placeholder="Enter coupon code"
+                        value={couponInput}
+                        onChangeText={(text) => {
+                          setCouponInput(text);
+                          if (couponError) setCouponError('');
+                        }}
+                        autoCapitalize="characters"
+                        error={couponError || undefined}
+                        onFocus={scrollCouponIntoView}
+                      />
+                    </View>
+                    <Button
+                      label="APPLY"
+                      variant="outline"
+                      onPress={applyCoupon}
+                      fullWidth={false}
+                      style={styles.couponApplyBtn}
                     />
                   </View>
-                  <Button
-                    label="APPLY"
-                    variant="outline"
-                    onPress={applyCoupon}
-                    fullWidth={false}
-                    style={styles.couponApplyBtn}
-                  />
-                </View>
-              </>
-            )}
-            {appliedCoupon ? (
-              <>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Subtotal</Text>
-                  <Text style={styles.billValue}>
-                    {formatINR(appliedCoupon.originalAmount)}
-                  </Text>
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.discountLabel}>
-                    Discount ({appliedCoupon.discountPercent}%)
-                  </Text>
-                  <Text style={styles.discountValue}>
-                    −{formatINR(appliedCoupon.discountAmount)}
-                  </Text>
-                </View>
-                <View style={[styles.billRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>Amount to pay now</Text>
-                  <Text style={styles.totalValue}>
-                    {formatINR(appliedCoupon.chargeAmount)}
-                  </Text>
-                </View>
-              </>
-            ) : null}
-          </Card>
+                </>
+              )}
+              {appliedCoupon ? (
+                <>
+                  <View style={styles.billRow}>
+                    <Text style={styles.billLabel}>Subtotal</Text>
+                    <Text style={styles.billValue}>
+                      {formatINR(appliedCoupon.originalAmount)}
+                    </Text>
+                  </View>
+                  <View style={styles.billRow}>
+                    <Text style={styles.discountLabel}>
+                      Discount ({appliedCoupon.discountPercent}%)
+                    </Text>
+                    <Text style={styles.discountValue}>
+                      −{formatINR(appliedCoupon.discountAmount)}
+                    </Text>
+                  </View>
+                  <View style={[styles.billRow, styles.totalRow]}>
+                    <Text style={styles.totalLabel}>Amount to pay now</Text>
+                    <Text style={styles.totalValue}>
+                      {formatINR(appliedCoupon.chargeAmount)}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+            </Card>
+          </View>
         ) : null}
-      </ScrollView>
-      <View style={styles.footer}>
-        <Button
-          label={
-            process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID?.includes('your_key')
-              ? `CONFIRM DEMO · ${formatINR(amountToPay)}`
-              : isExtraParts
-                ? `PAY EXTRA PARTS · ${formatINR(amountToPay)}`
-                : `PAY NOW · ${formatINR(amountToPay)}`
-          }
-          onPress={handlePayment}
-          loading={loading}
-        />
-        {!isExtraParts && bookingId ? (
+        </ScrollView>
+        <View style={styles.footer}>
           <Button
-            label="CANCEL BOOKING"
-            variant="outline"
-            onPress={cancelBooking}
-            disabled={loading}
-            style={styles.cancelBtn}
+            label={
+              process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID?.includes('your_key')
+                ? `CONFIRM DEMO · ${formatINR(amountToPay)}`
+                : isExtraParts
+                  ? `PAY EXTRA PARTS · ${formatINR(amountToPay)}`
+                  : `PAY NOW · ${formatINR(amountToPay)}`
+            }
+            onPress={handlePayment}
+            loading={loading}
           />
-        ) : null}
-      </View>
+          {!isExtraParts && bookingId ? (
+            <Button
+              label="CANCEL BOOKING"
+              variant="outline"
+              onPress={cancelBooking}
+              disabled={loading}
+              style={styles.cancelBtn}
+            />
+          ) : null}
+        </View>
+      </KeyboardAvoidingView>
       <Modal visible={webviewVisible} animationType="slide">
         <View style={styles.webviewWrap}>
           <WebView
@@ -543,32 +674,93 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
       </Modal>
+
+      <ThemedConfirmModal
+        visible={cancelConfirmOpen}
+        title="Cancel booking?"
+        message="Cancel this booking before payment? This cannot be undone."
+        confirmLabel="CANCEL BOOKING"
+        cancelLabel="KEEP"
+        confirmDestructive
+        loading={loading}
+        icon="close-circle-outline"
+        onConfirm={confirmCancelBooking}
+        onCancel={() => {
+          if (!loading) setCancelConfirmOpen(false);
+        }}
+      />
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        onClose={() => {
+          const next = resultAlert?.onClose;
+          setResultAlert(null);
+          next?.();
+        }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: 24, paddingBottom: 160 },
+  flex: { flex: 1 },
+  scroll: { padding: 24, paddingBottom: 32 },
   title: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 24,
     color: COLORS.white,
     marginBottom: 20,
   },
-  bookingCard: { marginBottom: 16 },
+  confirmNotice: {
+    marginBottom: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: 'rgba(142,48,47,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(142,48,47,0.45)',
+  },
+  confirmNoticeTitle: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 13,
+    color: COLORS.red,
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  confirmNoticeBody: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.white,
+  },
+  bookingCard: {
+    marginBottom: 16,
+    padding: 18,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
   bookingService: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 16,
+    lineHeight: 28,
     color: COLORS.white,
+    includeFontPadding: true,
   },
   bookingDate: {
-    fontFamily: 'SpaceMono_400Regular',
-    fontSize: 11,
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    lineHeight: 22,
     color: COLORS.gray,
     marginTop: 8,
+    includeFontPadding: true,
   },
-  billCard: { marginBottom: 16 },
+  billCard: { marginBottom: 16, overflow: 'visible' },
   couponCard: { marginBottom: 16 },
   couponRow: {
     flexDirection: 'row',
@@ -669,14 +861,13 @@ const styles = StyleSheet.create({
     color: COLORS.red,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
     paddingBottom: 36,
     backgroundColor: COLORS.background,
     gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
   },
   cancelBtn: {
     marginTop: 0,

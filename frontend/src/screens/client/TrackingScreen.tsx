@@ -153,6 +153,14 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
             phone={technician.phone}
             showCallButton
           />
+        ) : needsPay && !extraPartsOnly ? (
+          <Card padding={16} style={styles.waitingCard}>
+            <Text style={styles.waitingTitle}>Complete payment to confirm</Text>
+            <Text style={styles.waitingBody}>
+              Your booking is held until payment succeeds. Technicians are
+              assigned only after you pay.
+            </Text>
+          </Card>
         ) : (
           <Card padding={16} style={styles.waitingCard}>
             <Text style={styles.waitingTitle}>Technician not assigned yet</Text>

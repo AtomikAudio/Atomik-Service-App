@@ -307,7 +307,9 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           />
         </Card>
 
-        <Text style={styles.version}>ATOMIK v1.0.0 • Precision Audio Service</Text>
+        <Text style={styles.version}>
+          ATOMIK v1.0.0 • Audio Engineering and Design · Service Infrastructure
+        </Text>
       </SafeScrollView>
     </Screen>
   );

@@ -26,6 +26,7 @@ import {
   ensureInvoiceReflectsBookingSpareParts,
   getInvoiceBalanceDue,
   sumSparePartsLineItems,
+  hasBaseServicePayment,
 } from '../utils/bookingPayment';
 import { parseBookingStatus, parsePagination, toObjectId } from '../utils/mongoQuery';
 import { Venue } from '../models/Venue';
@@ -127,7 +128,7 @@ export const createBooking = async (
     await Notification.create({
       userId: req.user!.id,
       title: 'Booking placed',
-      body: `Your ${serviceType} request ${booking.bookingId} is pending payment.`,
+      body: `Your ${serviceType} request ${booking.bookingId} is pending payment. Complete payment to confirm — technicians are assigned after payment.`,
       type: 'success',
       category: 'booking',
       data: { bookingId: booking._id },
@@ -135,15 +136,7 @@ export const createBooking = async (
 
     await notifyByRoles(['admin'], {
       title: 'New client booking',
-      body: `${booking.bookingId} · ${serviceType} at ${venueName}. ${scheduleLabel}. Assign a technician.`,
-      type: 'info',
-      category: 'booking',
-      data: { bookingId: booking._id },
-    });
-
-    await notifyByRoles(['technician'], {
-      title: 'New job available',
-      body: `${booking.bookingId} · ${serviceType} at ${venueName}. ${scheduleLabel}. Awaiting admin assignment.`,
+      body: `${booking.bookingId} · ${serviceType} at ${venueName}. ${scheduleLabel}. Awaiting client payment.`,
       type: 'info',
       category: 'booking',
       data: { bookingId: booking._id },
@@ -183,6 +176,18 @@ export const getMyBookings = async (
         : { clientId: req.user!.id };
 
     if (status) filter.status = status;
+
+    // Technicians only see jobs after the client has paid the base service.
+    if (role === 'technician' || role === 'master_technician') {
+      const paidInvoices = await Invoice.find({
+        $or: [
+          { amountPaid: { $gt: 0 } },
+          { status: 'paid' },
+          { paidAt: { $ne: null } },
+        ],
+      }).select('_id');
+      filter.invoiceId = { $in: paidInvoices.map((inv) => inv._id) };
+    }
 
     const bookings = await Booking.find(filter)
       .populate('venueId', 'name area city address state pincode')
@@ -251,19 +256,22 @@ export const getBookingById = async (
 
     const assignedTechId = resolveTechnicianId(booking);
     const role = req.user!.role;
+    const invoicePaid = hasBaseServicePayment(booking.invoiceId);
 
     const isOwner = booking.clientId._id.toString() === req.user!.id;
     const isTech = assignedTechId === req.user!.id;
     const isAdmin = role === 'admin';
     const isOpenPool =
-      isJobOpenForPool(booking) && booking.status !== 'cancelled';
+      isJobOpenForPool(booking) &&
+      booking.status !== 'cancelled' &&
+      invoicePaid;
 
     let allowed = isOwner || isAdmin;
     if (!allowed && role === 'technician') {
       allowed = isTech || isOpenPool;
     }
     if (!allowed && role === 'master_technician') {
-      allowed = booking.status !== 'cancelled';
+      allowed = invoicePaid && booking.status !== 'cancelled';
     }
 
     if (!allowed) {
@@ -442,6 +450,21 @@ export const acceptJob = async (
       ? 'Master Technician accepted the job'
       : 'Technician accepted the job';
 
+    const existingForPay = await Booking.findById(req.params.id).populate(
+      'invoiceId'
+    );
+    if (!existingForPay) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+    if (!hasBaseServicePayment(existingForPay.invoiceId)) {
+      res.status(400).json({
+        success: false,
+        message: 'This job is available only after the client completes payment.',
+      });
+      return;
+    }
+
     const booking = await Booking.findOneAndUpdate(
       {
         _id: req.params.id,
@@ -521,6 +544,17 @@ export const rejectJob = async (
       res.status(400).json({
         success: false,
         message: 'This job has already been assigned',
+      });
+      return;
+    }
+
+    const invoice = booking.invoiceId
+      ? await Invoice.findById(booking.invoiceId)
+      : null;
+    if (!hasBaseServicePayment(invoice)) {
+      res.status(400).json({
+        success: false,
+        message: 'This job is available only after the client completes payment.',
       });
       return;
     }
@@ -693,6 +727,17 @@ export const assignJobByMaster = async (
       return;
     }
 
+    const invoiceForMaster = existing.invoiceId
+      ? await Invoice.findById(existing.invoiceId)
+      : null;
+    if (!hasBaseServicePayment(invoiceForMaster)) {
+      res.status(400).json({
+        success: false,
+        message: 'Assign only after the client completes payment.',
+      });
+      return;
+    }
+
     const master = await User.findById(masterId).select('name');
     const masterName = master?.name ?? 'Master Technician';
 
@@ -785,6 +830,17 @@ export const assignTechnician = async (
       res.status(400).json({
         success: false,
         message: `Cannot assign a ${existing.status} booking`,
+      });
+      return;
+    }
+
+    const invoiceForAdmin = existing.invoiceId
+      ? await Invoice.findById(existing.invoiceId)
+      : null;
+    if (!hasBaseServicePayment(invoiceForAdmin)) {
+      res.status(400).json({
+        success: false,
+        message: 'Assign only after the client completes payment.',
       });
       return;
     }
@@ -964,19 +1020,59 @@ export const cancelBooking = async (
       return;
     }
 
-    if (['completed', 'cancelled'].includes(booking.status)) {
-      res.status(400).json({ success: false, message: `Cannot cancel a ${booking.status} booking` });
+    const reason =
+      typeof req.body.reason === 'string' ? req.body.reason.slice(0, 500) : undefined;
+    const now = new Date();
+    const updatedBy = new mongoose.Types.ObjectId(req.user!.id);
+
+    const cancelOpenInvoices = async () => {
+      await Invoice.updateMany(
+        {
+          bookingId: booking._id,
+          status: { $in: ['pending', 'overdue'] },
+        },
+        {
+          $set: {
+            status: 'cancelled',
+          },
+        }
+      );
+    };
+
+    // Idempotent: already cancelled → still sync invoices and succeed.
+    if (booking.status === 'cancelled') {
+      await cancelOpenInvoices();
+      res.status(200).json({
+        success: true,
+        message: 'Booking already cancelled',
+        alreadyCancelled: true,
+      });
       return;
     }
 
-    const reason =
-      typeof req.body.reason === 'string' ? req.body.reason.slice(0, 500) : undefined;
+    if (booking.status === 'completed') {
+      res.status(400).json({
+        success: false,
+        message: 'Cannot cancel a completed booking',
+      });
+      return;
+    }
 
     await Booking.findByIdAndUpdate(bookingId, {
       status: 'cancelled',
-      cancelledAt: new Date(),
+      cancelledAt: now,
       cancellationReason: reason,
+      $push: {
+        statusHistory: {
+          status: 'cancelled',
+          timestamp: now,
+          notes: reason || 'Cancelled by client',
+          updatedBy,
+        },
+      },
     });
+
+    await cancelOpenInvoices();
 
     res.status(200).json({ success: true, message: 'Booking cancelled' });
   } catch (err) {

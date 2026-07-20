@@ -118,25 +118,28 @@ export const createPaymentOrder = async (
         label: applied.label,
       };
       chargeAmount = applied.chargeAmount;
+
+      // Persist coupon on the invoice before creating the Razorpay order so
+      // checkout and settlement always see the discounted charge.
+      await Invoice.findByIdAndUpdate(invoiceId, {
+        couponCode: couponPayload.couponCode,
+        discountPercent: couponPayload.discountPercent,
+        discountAmount: couponPayload.discountAmount,
+      });
+    } else {
+      await Invoice.findByIdAndUpdate(invoiceId, {
+        $unset: {
+          couponCode: 1,
+          discountPercent: 1,
+          discountAmount: 1,
+        },
+      });
     }
 
     const respondDemoOrder = async (note: string) => {
       const demo = createDemoPaymentIds(String(invoice._id));
       await Invoice.findByIdAndUpdate(invoiceId, {
         razorpayOrderId: demo.orderId,
-        ...(couponPayload
-          ? {
-              couponCode: couponPayload.couponCode,
-              discountPercent: couponPayload.discountPercent,
-              discountAmount: couponPayload.discountAmount,
-            }
-          : {
-              $unset: {
-                couponCode: 1,
-                discountPercent: 1,
-                discountAmount: 1,
-              },
-            }),
       });
 
       res.status(200).json({
@@ -168,25 +171,23 @@ export const createPaymentOrder = async (
     }
 
     try {
-      const order = await createOrder(chargeAmount, 'INR', invoice.invoiceNumber);
+      const order = await createOrder(
+        chargeAmount,
+        'INR',
+        invoice.invoiceNumber,
+        couponPayload
+          ? {
+              coupon: String(couponPayload.couponCode),
+              discount_percent: String(couponPayload.discountPercent),
+              discount_amount: String(couponPayload.discountAmount),
+              original_amount: String(couponPayload.originalAmount),
+            }
+          : undefined
+      );
 
-      if (couponPayload) {
-        await Invoice.findByIdAndUpdate(invoiceId, {
-          razorpayOrderId: order.id,
-          couponCode: couponPayload.couponCode,
-          discountPercent: couponPayload.discountPercent,
-          discountAmount: couponPayload.discountAmount,
-        });
-      } else {
-        await Invoice.findByIdAndUpdate(invoiceId, {
-          razorpayOrderId: order.id,
-          $unset: {
-            couponCode: 1,
-            discountPercent: 1,
-            discountAmount: 1,
-          },
-        });
-      }
+      await Invoice.findByIdAndUpdate(invoiceId, {
+        razorpayOrderId: order.id,
+      });
 
       res.status(200).json({
         success: true,
@@ -438,7 +439,10 @@ export const getMyInvoices = async (
     if (status) filter.status = status;
 
     const invoices = await Invoice.find(filter)
-      .populate('bookingId', 'bookingId serviceType scheduledDate spareParts')
+      .populate(
+        'bookingId',
+        'bookingId serviceType scheduledDate scheduledTime spareParts status'
+      )
       .sort({ createdAt: -1 });
 
     for (const inv of invoices) {
@@ -454,11 +458,44 @@ export const getMyInvoices = async (
     const refreshed =
       invoices.length > 0
         ? await Invoice.find({ _id: { $in: invoices.map((i) => i._id) } })
-            .populate('bookingId', 'bookingId serviceType scheduledDate spareParts')
+            .populate(
+              'bookingId',
+              'bookingId serviceType scheduledDate scheduledTime spareParts status'
+            )
             .sort({ createdAt: -1 })
         : [];
 
-    const serialized = refreshed.map((inv) => {
+    // Heal stale rows: booking cancelled but invoice still pending/overdue.
+    const staleIds = refreshed
+      .filter((inv) => {
+        if (!['pending', 'overdue'].includes(inv.status)) return false;
+        const booking = inv.bookingId as { status?: string } | null;
+        return (
+          booking &&
+          typeof booking === 'object' &&
+          booking.status === 'cancelled'
+        );
+      })
+      .map((inv) => inv._id);
+
+    if (staleIds.length > 0) {
+      await Invoice.updateMany(
+        { _id: { $in: staleIds } },
+        { $set: { status: 'cancelled' } }
+      );
+    }
+
+    const serialized = refreshed
+      .filter((inv) => {
+        if (staleIds.some((id) => String(id) === String(inv._id))) return false;
+        if (inv.status === 'cancelled') return false;
+        const booking = inv.bookingId as { status?: string } | null;
+        if (booking && typeof booking === 'object' && booking.status === 'cancelled') {
+          return false;
+        }
+        return true;
+      })
+      .map((inv) => {
       const obj = inv.toObject();
       let amountPaid = obj.amountPaid ?? 0;
       if (obj.status === 'paid' && amountPaid === 0) {

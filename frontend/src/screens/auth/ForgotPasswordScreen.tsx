@@ -6,6 +6,7 @@ import { Button } from '../../components/common/Button';
 import { PhoneOtpVerification } from '../../components/auth/PhoneOtpVerification';
 import { COLORS } from '../../constants/colors';
 import { authService } from '../../services/auth';
+import { formatRateLimitMessage } from '../../utils/rateLimitMessage';
 
 interface Props {
   navigation: any;
@@ -20,9 +21,6 @@ export const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const phoneDigits = phone.replace(/\D/g, '');
-  const hasValidPhone = phoneDigits.length >= 10;
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -41,7 +39,10 @@ export const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
       await authService.resetPasswordWithPhone(phone, otp, password);
       setDone(true);
     } catch (err: any) {
-      Alert.alert('Reset Failed', err.message || 'Could not reset your password');
+      Alert.alert(
+        err?.status === 429 ? 'Too many attempts' : 'Reset Failed',
+        formatRateLimitMessage(err, 'Could not reset your password')
+      );
     } finally {
       setLoading(false);
     }
@@ -71,20 +72,15 @@ export const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
             editable={!phoneVerified}
           />
 
-          {hasValidPhone ? (
-            <PhoneOtpVerification
-              phone={phone}
-              purpose="forgot_password"
-              otpError={errors.otp}
-              onClearOtpError={() => setErrors((prev) => ({ ...prev, otp: '' }))}
-              onVerifiedChange={setPhoneVerified}
-              onOtpChange={setOtp}
-            />
-          ) : (
-            <Text style={styles.hint}>
-              Enter your 10-digit mobile number to receive OTP.
-            </Text>
-          )}
+          <PhoneOtpVerification
+            phone={phone}
+            purpose="forgot_password"
+            otpError={errors.otp}
+            onClearOtpError={() => setErrors((prev) => ({ ...prev, otp: '' }))}
+            onVerifiedChange={setPhoneVerified}
+            onOtpChange={setOtp}
+            verifiedHint="Phone verified — you can set a new password"
+          />
 
           {phoneVerified ? (
             <>
@@ -170,14 +166,6 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     lineHeight: 22,
     marginBottom: 32,
-  },
-  hint: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
-    color: COLORS.gray,
-    textAlign: 'center',
-    marginBottom: 12,
-    marginTop: -4,
   },
   successContainer: {
     alignItems: 'center',

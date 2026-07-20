@@ -28,6 +28,8 @@ interface InputProps {
   icon?: keyof typeof Ionicons.glyphMap;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightIconPress?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -46,6 +48,8 @@ export const Input: React.FC<InputProps> = ({
   icon,
   rightIcon,
   onRightIconPress,
+  onFocus,
+  onBlur,
 }) => {
   const [focused, setFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -126,8 +130,14 @@ export const Input: React.FC<InputProps> = ({
             editable={editable}
             multiline={multiline}
             numberOfLines={numberOfLines}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onFocus={() => {
+              setFocused(true);
+              onFocus?.();
+            }}
+            onBlur={() => {
+              setFocused(false);
+              onBlur?.();
+            }}
             selectionColor={COLORS.red}
           />
           {secureTextEntry && (
@@ -194,6 +204,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: 'Montserrat_400Regular',
     fontSize: 14,
+    lineHeight: 22,
     paddingHorizontal: 16,
   },
   singleLineInput: {

@@ -13,7 +13,8 @@ const start = async () => {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n╔════════════════════════════════╗`);
     console.log(`║  ATOMIK API — PORT ${PORT}         ║`);
-    console.log(`║  Precision Audio Service       ║`);
+    console.log(`║  Audio Engineering and Design  ║`);
+    console.log(`║  Service Infrastructure        ║`);
     console.log(`╚════════════════════════════════╝\n`);
   });
   server.on('error', (err: NodeJS.ErrnoException) => {

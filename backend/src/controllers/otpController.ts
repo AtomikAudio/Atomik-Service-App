@@ -21,13 +21,22 @@ const RESEND_COOLDOWN_MS = 30_000;
 async function findUserByPhone(phoneRaw: string) {
   const e164 = toE164(phoneRaw);
   const normalized = normalizePhone(phoneRaw);
+  if (normalized.length < 10) return null;
+
+  // Match common stored formats, then confirm with last-10-digit compare.
   const phoneUsers = await User.find({
+    phone: { $exists: true, $ne: '' },
     $or: [
       { phone: phoneRaw },
       { phone: e164 },
       { phone: `+91${normalized}` },
+      { phone: normalized },
+      { phone: `91${normalized}` },
+      // Regex on last 10 digits covers spacing / leading-zero variants.
+      { phone: { $regex: `${normalized}$` } },
     ],
-  });
+  }).limit(20);
+
   return phoneUsers.find((u) => u.phone && phonesMatch(u.phone, phoneRaw)) ?? null;
 }
 
@@ -69,7 +78,11 @@ export const sendSignupOtp = async (
 
     if (purpose === 'signup' || purpose === 'technician_signup') {
       if (existingUser) {
-        res.status(409).json({ success: false, message: 'Phone number already registered' });
+        res.status(409).json({
+          success: false,
+          message: 'Account already exists',
+          code: 'ACCOUNT_EXISTS',
+        });
         return;
       }
     }

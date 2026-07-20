@@ -16,6 +16,9 @@ export interface BookingDraft {
   slotHoldExpiresAt?: string;
   lat?: number;
   lng?: number;
+  /** Set after place-order succeeds; used so Payment → back keeps the draft. */
+  pendingBookingId?: string;
+  pendingInvoiceId?: string;
 }
 
 const emptyDraft: BookingDraft = {

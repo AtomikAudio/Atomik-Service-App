@@ -34,3 +34,14 @@ export const LINE_HEIGHTS = {
   normal: 1.5,
   relaxed: 1.75,
 };
+
+/** Absolute line heights for common font sizes (≈ normal 1.5–1.6). */
+export const TEXT_LINE_HEIGHTS = {
+  xs: 16,
+  sm: 20,
+  base: 22,
+  md: 26,
+  lg: 28,
+  body: 24,
+  hint: 20,
+};

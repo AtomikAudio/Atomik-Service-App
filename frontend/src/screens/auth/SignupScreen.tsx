@@ -19,6 +19,7 @@ import { keyboardBehavior } from '../../utils/layout';
 import { authService } from '../../services/auth';
 import { useDispatch } from 'react-redux';
 import { setAuth } from '../../store/authSlice';
+import { formatRateLimitMessage } from '../../utils/rateLimitMessage';
 
 interface Props {
   navigation: any;
@@ -83,7 +84,10 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
         })
       );
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message || 'Please try again');
+      Alert.alert(
+        err?.status === 429 ? 'Too many attempts' : 'Registration Failed',
+        formatRateLimitMessage(err, 'Please try again later.')
+      );
     } finally {
       setLoading(false);
     }
@@ -154,6 +158,7 @@ export const SignupScreen: React.FC<Props> = ({ navigation }) => {
                 onClearOtpError={() => setErrors((prev) => ({ ...prev, otp: '' }))}
                 onVerifiedChange={setPhoneVerified}
                 onOtpChange={setOtp}
+                verifiedHint="Phone verified — you can create your account"
               />
             ) : (
               <Text style={styles.hint}>Enter your 10-digit mobile number to receive OTP.</Text>

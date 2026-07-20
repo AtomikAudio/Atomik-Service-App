@@ -189,7 +189,9 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
       scheduledTime: selectedTime,
       slotHoldExpiresAt: holdExpiresAt ?? undefined,
     }));
-    navigation.navigate('PlaceOrder');
+    // Return to Place Order hub — do not push another PlaceOrder (breaks Back).
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('PlaceOrder');
   };
 
   const slotStyle = (slot: string, status?: SlotStatus) => {

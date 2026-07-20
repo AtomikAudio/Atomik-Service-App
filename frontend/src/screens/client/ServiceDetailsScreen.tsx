@@ -1,11 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '../../components/common/Header';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { LoadingView } from '../../components/common/LoadingView';
 import { ErrorView } from '../../components/common/ErrorView';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../../components/common/ThemedConfirmModal';
 import { TechnicianAssignedCard } from '../../components/client/TechnicianAssignedCard';
 import { bookingService, Booking } from '../../services/bookings';
 import { paymentService, Invoice } from '../../services/payments';
@@ -34,6 +38,13 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
+    goBack?: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,37 +71,29 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
     }, [load])
   );
 
-  const cancelBooking = () => {
+  const confirmCancelBooking = async () => {
     if (!booking) return;
-    Alert.alert(
-      'Cancel booking?',
-      `Cancel booking ${booking.bookingId}? This cannot be undone.`,
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Cancel booking',
-          style: 'destructive',
-          onPress: async () => {
-            setCancelling(true);
-            try {
-              await bookingService.cancelBooking(
-                booking._id,
-                'Cancelled by client'
-              );
-              Alert.alert('Cancelled', 'Your booking has been cancelled.', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-              ]);
-            } catch (e: unknown) {
-              const msg =
-                e instanceof Error ? e.message : 'Could not cancel booking';
-              Alert.alert('Failed', msg);
-            } finally {
-              setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+    setCancelling(true);
+    try {
+      await bookingService.cancelBooking(booking._id, 'Cancelled by client');
+      setCancelConfirmOpen(false);
+      setResultAlert({
+        title: 'Cancelled',
+        message: 'Your booking has been cancelled.',
+        icon: 'checkmark-circle-outline',
+        goBack: true,
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not cancel booking';
+      setResultAlert({
+        title: 'Could not cancel',
+        message: msg,
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setCancelling(false);
+    }
   };
 
   if (loading) return <LoadingView />;
@@ -178,7 +181,7 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
                   <Button
                     label="CANCEL"
                     variant="outline"
-                    onPress={cancelBooking}
+                    onPress={() => setCancelConfirmOpen(true)}
                     loading={cancelling}
                     style={styles.cancelBtnFlex}
                     fullWidth={false}
@@ -189,7 +192,7 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
               <Button
                 label="CANCEL BOOKING"
                 variant="outline"
-                onPress={cancelBooking}
+                onPress={() => setCancelConfirmOpen(true)}
                 loading={cancelling}
                 style={{ marginTop: 10 }}
               />
@@ -197,6 +200,33 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           </>
         ) : null}
       </ScrollView>
+
+      <ThemedConfirmModal
+        visible={cancelConfirmOpen}
+        title="Cancel booking?"
+        message="Cancel this booking? This cannot be undone."
+        confirmLabel="CANCEL BOOKING"
+        cancelLabel="KEEP"
+        confirmDestructive
+        loading={cancelling}
+        icon="close-circle-outline"
+        onConfirm={confirmCancelBooking}
+        onCancel={() => {
+          if (!cancelling) setCancelConfirmOpen(false);
+        }}
+      />
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        onClose={() => {
+          const goBack = resultAlert?.goBack;
+          setResultAlert(null);
+          if (goBack) navigation.goBack();
+        }}
+      />
     </View>
   );
 };

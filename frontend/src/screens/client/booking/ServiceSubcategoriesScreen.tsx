@@ -57,6 +57,7 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.label}</Text>
+              <Text style={styles.rowDesc}>{item.description}</Text>
             </View>
           </View>
         ))}
@@ -98,20 +99,20 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
-    marginBottom: 20,
-    lineHeight: 18,
+    marginBottom: 24,
+    lineHeight: 22,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: COLORS.surface,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: 16,
-    marginBottom: 10,
+    padding: 18,
+    marginBottom: 14,
     gap: 14,
   },
   rowIcon: {
@@ -121,12 +122,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.redMuted,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
   rowText: { flex: 1 },
   rowTitle: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
     color: COLORS.white,
+    lineHeight: 22,
+  },
+  rowDesc: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 6,
+    lineHeight: 20,
   },
   subtotalRow: {
     flexDirection: 'row',
@@ -192,8 +202,8 @@ const styles = StyleSheet.create({
   chargeNoteText: {
     flex: 1,
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.gray,
-    lineHeight: 17,
+    lineHeight: 20,
   },
 });

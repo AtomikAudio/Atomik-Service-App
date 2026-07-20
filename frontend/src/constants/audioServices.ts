@@ -27,7 +27,8 @@ export const SERVICE_GROUPS: ServiceGroup[] = [
     id: 'general-service',
     label: 'General Service',
     icon: 'hardware-chip-outline',
-    description: 'Equipment-specific maintenance & tuning',
+    description:
+      'Full system service — tuning, amp rack rebuild, and damage inspection',
     hasSubmenu: true,
     apiType: 'general',
   },
@@ -35,7 +36,8 @@ export const SERVICE_GROUPS: ServiceGroup[] = [
     id: 'general-visit',
     label: 'General Visit',
     icon: 'navigate-outline',
-    description: 'On-site assessment & diagnostic visit',
+    description:
+      'On-site audio assessment, diagnostics, and recommendations',
     hasSubmenu: false,
     apiType: 'inspection',
   },
@@ -117,20 +119,31 @@ export const GENERAL_SERVICE_PACKAGE: AudioServiceItem = {
 };
 
 /** What the General Service package includes (display-only, not selectable). */
-export const GENERAL_SERVICE_INCLUSIONS: { id: string; label: string; icon: string }[] = [
+export const GENERAL_SERVICE_INCLUSIONS: {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+}[] = [
   {
     id: 'tuning',
     label: 'Tuning & Alignment of the Sound System',
+    description:
+      'Gain structure, EQ balance, and speaker alignment for clear, even coverage.',
     icon: 'options-outline',
   },
   {
     id: 'amp-rack',
     label: 'Reassembly of the Amplifier Rack',
+    description:
+      'Clean rack rebuild, cable dress, and power sequencing for reliable operation.',
     icon: 'construct-outline',
   },
   {
     id: 'damage-check',
     label: 'Inspection for Any Damage',
+    description:
+      'Drivers, connectors, and protection circuits checked before you go live.',
     icon: 'shield-checkmark-outline',
   },
 ];

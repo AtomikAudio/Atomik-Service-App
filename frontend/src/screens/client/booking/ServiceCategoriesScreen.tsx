@@ -45,9 +45,10 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
     if (route?.params?.reset) resetDraft();
     if (preselect === 'general-visit') {
       addCategory('general-visit');
-      navigation.replace('PlaceOrder');
+      // Use navigate (not replace) so Back returns to Categories, not Home.
+      navigation.navigate('PlaceOrder');
     } else if (preselect === 'general-service') {
-      navigation.replace('ServiceSubcategories');
+      navigation.navigate('ServiceSubcategories');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -191,12 +192,13 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: 20, paddingBottom: 40, gap: 14 },
+  scroll: { padding: 20, paddingBottom: 40, gap: 16 },
   sectionTitle: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
     color: COLORS.white,
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   sectionTitleInline: {
     fontFamily: 'Montserrat_600SemiBold',
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.gray,
-    lineHeight: 17,
+    lineHeight: 20,
   },
   cardMeta: {
     fontFamily: 'SpaceMono_400Regular',
@@ -309,8 +311,8 @@ const styles = StyleSheet.create({
   chargeNoteText: {
     flex: 1,
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.gray,
-    lineHeight: 17,
+    lineHeight: 20,
   },
 });

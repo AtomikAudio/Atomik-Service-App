@@ -21,7 +21,9 @@ export const OrderDetailsScreen: React.FC<Props> = ({ navigation }) => {
 
   const save = () => {
     setDraft((d) => ({ ...d, details: text.trim() }));
-    navigation.navigate('PlaceOrder');
+    // Return to Place Order hub — do not push another PlaceOrder (breaks Back).
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('PlaceOrder');
   };
 
   return (
@@ -70,10 +72,10 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
     marginBottom: 16,
-    lineHeight: 18,
+    lineHeight: 22,
   },
   input: {
     minHeight: 200,

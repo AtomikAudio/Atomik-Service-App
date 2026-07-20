@@ -71,7 +71,7 @@ export const SecurityScreen: React.FC<Props> = ({ navigation }) => {
       <Card padding={16}>
         <Text style={styles.title}>Password</Text>
         <Text style={styles.body}>
-          Use a strong password and change it periodically. Reset via email if you forget it.
+          Use a strong password and change it periodically. Reset via phone number if you forget it.
         </Text>
         <TouchableOpacity
           style={styles.linkBtn}

@@ -34,7 +34,12 @@ function getClient(): Razorpay {
   return client;
 }
 
-export const createOrder = async (amount: number, currency = 'INR', receipt: string) => {
+export const createOrder = async (
+  amount: number,
+  currency = 'INR',
+  receipt: string,
+  notes?: Record<string, string>
+) => {
   const razorpay = getClient();
   const uniqueReceipt = `${receipt.slice(0, 24)}_${Date.now()}`.slice(0, 40);
   return razorpay.orders.create({
@@ -42,6 +47,7 @@ export const createOrder = async (amount: number, currency = 'INR', receipt: str
     currency,
     receipt: uniqueReceipt,
     payment_capture: true,
+    ...(notes && Object.keys(notes).length > 0 ? { notes } : {}),
   });
 };
 

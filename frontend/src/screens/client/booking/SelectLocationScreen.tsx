@@ -52,7 +52,8 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
       venueId: v._id,
       addressLabel: formatLabel(v) || `${v.name}, ${v.area}, ${v.city}`,
     }));
-    navigation.navigate('PlaceOrder');
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('PlaceOrder');
   };
 
   const validate = () => {
@@ -96,7 +97,8 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
         venueId: venue._id,
         addressLabel: label,
       }));
-      navigation.navigate('PlaceOrder');
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.navigate('PlaceOrder');
     } catch (err: any) {
       Alert.alert('Could not save address', err.message || 'Try again');
     } finally {
@@ -282,6 +284,6 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono_400Regular',
     fontSize: 10,
     color: COLORS.gray,
-    lineHeight: 15,
+    lineHeight: 18,
   },
 });

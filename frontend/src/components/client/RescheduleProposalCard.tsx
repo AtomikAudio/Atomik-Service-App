@@ -144,7 +144,7 @@ export const RescheduleProposalCard: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,193,7,0.35)',
   },

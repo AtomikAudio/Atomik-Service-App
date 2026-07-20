@@ -8,16 +8,18 @@ import {
   Image,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import { OrderActionRow } from '../../../components/booking/OrderActionRow';
+import { ThemedConfirmModal } from '../../../components/common/ThemedConfirmModal';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { getServiceById } from '../../../constants/audioServices';
 import { bookingService } from '../../../services/bookings';
 import { COLORS } from '../../../constants/colors';
 import { formatBookingDate, formatBookingTime } from '../../../utils/schedule';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSlotHoldTimer } from '../../../hooks/useSlotHoldTimer';
 
 interface Props {
@@ -27,6 +29,7 @@ interface Props {
 export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   const {
     draft,
+    setDraft,
     removeCategory,
     canConfirm,
     primaryServiceType,
@@ -34,6 +37,8 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   } = useBookingDraft();
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(
     draft.slotHoldExpiresAt ?? null
   );
@@ -45,6 +50,16 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
     new Date(holdExpiresAt as string).getTime() > Date.now();
 
   const refreshHold = useCallback(async () => {
+    // Prefer draft countdown so Payment → back still shows the timer even
+    // after the server-side hold was consumed by place-order.
+    if (draft.slotHoldExpiresAt) {
+      const stillValid =
+        new Date(draft.slotHoldExpiresAt).getTime() > Date.now();
+      if (stillValid) {
+        setHoldExpiresAt(draft.slotHoldExpiresAt);
+        return;
+      }
+    }
     if (!draft.scheduledDate || !draft.scheduledTime) return;
     try {
       const hold = await bookingService.getMySlotHold();
@@ -54,13 +69,20 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         hold.displayTime === formatBookingTime(draft.scheduledTime)
       ) {
         setHoldExpiresAt(hold.expiresAt);
-      } else {
+        setDraft((d) => ({ ...d, slotHoldExpiresAt: hold.expiresAt }));
+      } else if (!draft.pendingBookingId) {
         setHoldExpiresAt(null);
       }
     } catch {
       setHoldExpiresAt(draft.slotHoldExpiresAt ?? null);
     }
-  }, [draft.scheduledDate, draft.scheduledTime, draft.slotHoldExpiresAt]);
+  }, [
+    draft.scheduledDate,
+    draft.scheduledTime,
+    draft.slotHoldExpiresAt,
+    draft.pendingBookingId,
+    setDraft,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,8 +93,6 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
-    // Clear only once the hold timestamp has truly passed (avoids wiping a
-    // freshly-refreshed hold before the timer's first tick updates secondsLeft).
     if (holdExpiresAt && new Date(holdExpiresAt).getTime() <= Date.now()) {
       setHoldExpiresAt(null);
     }
@@ -94,8 +114,27 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
       ? 'General Service'
       : 'Place order';
 
+  const goToPayment = (bookingId: string, invoiceId: string) => {
+    navigation.navigate('Payment', {
+      serviceType: primaryServiceType(),
+      bookingId,
+      invoiceId,
+      date: scheduleLabel,
+      time: draft.scheduledTime,
+      fromBookingFlow: true,
+    });
+  };
+
   const placeOrder = async () => {
     if (!canConfirm || !draft.venueId) return;
+
+    // Already placed — return to checkout without creating a duplicate.
+    if (draft.pendingBookingId && draft.pendingInvoiceId) {
+      setModalVisible(false);
+      goToPayment(draft.pendingBookingId, draft.pendingInvoiceId);
+      return;
+    }
+
     if (!holdActive) {
       Alert.alert(
         'Slot expired',
@@ -124,14 +163,13 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
       });
 
       setModalVisible(false);
-      resetDraft();
-      navigation.replace('Payment', {
-        serviceType: primaryServiceType(),
-        bookingId: booking._id,
-        invoiceId: invoice._id,
-        date: scheduleLabel,
-        time: draft.scheduledTime,
-      });
+      // Keep draft (details + timer) so Payment back restores Place Order.
+      setDraft((d) => ({
+        ...d,
+        pendingBookingId: booking._id,
+        pendingInvoiceId: invoice._id,
+      }));
+      goToPayment(booking._id, invoice._id);
     } catch (e: any) {
       Alert.alert('Order failed', e.message || 'Try again');
     } finally {
@@ -139,20 +177,75 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const confirmLeaveBooking = async () => {
+    setLeaving(true);
+    try {
+      if (draft.pendingBookingId) {
+        try {
+          await bookingService.cancelBooking(
+            draft.pendingBookingId,
+            'Left booking flow before payment'
+          );
+        } catch {
+          // Ignore — draft still clears so the user can start fresh.
+        }
+      }
+    } finally {
+      resetDraft();
+      setLeaving(false);
+      setLeaveConfirmOpen(false);
+      navigation.navigate('ServiceCategories', { reset: true });
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      const onHardwareBack = () => {
+        setLeaveConfirmOpen(true);
+        return true;
+      };
+      const sub = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onHardwareBack
+      );
+      return () => sub.remove();
+    }, [])
+  );
+
   return (
     <View style={styles.container}>
       <BookingFlowHeader
         title={headerTitle}
-        onBack={() => navigation.goBack()}
+        onBack={() => setLeaveConfirmOpen(true)}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
+        {holdActive ? (
+          <View style={styles.holdBanner}>
+            <Ionicons name="time-outline" size={18} color={COLORS.white} />
+            <Text style={styles.holdBannerText}>
+              Slot held — {Math.max(0, Math.ceil(secondsLeft / 60))} min left to
+              confirm
+            </Text>
+          </View>
+        ) : null}
+
         {!holdActive && draft.scheduledTime ? (
           <View style={styles.holdExpiredBanner}>
             <Text style={styles.holdExpiredText}>
-              Slot reservation expired — update your schedule before placing the order
+              {draft.pendingBookingId
+                ? 'Continue to payment to complete this booking, or update your schedule.'
+                : 'Slot reservation expired — update your schedule before placing the order'}
             </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ScheduleBooking')}>
-              <Text style={styles.holdExpiredLink}>Go to Schedule</Text>
+            <TouchableOpacity
+              onPress={() =>
+                draft.pendingBookingId && draft.pendingInvoiceId
+                  ? goToPayment(draft.pendingBookingId, draft.pendingInvoiceId)
+                  : navigation.navigate('ScheduleBooking')
+              }
+            >
+              <Text style={styles.holdExpiredLink}>
+                {draft.pendingBookingId ? 'Go to Payment' : 'Go to Schedule'}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -262,10 +355,17 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.confirmBtn,
-            (!canConfirm || !holdActive) && styles.confirmDisabled,
+            (!canConfirm || (!holdActive && !draft.pendingBookingId)) &&
+              styles.confirmDisabled,
           ]}
-          disabled={!canConfirm || !holdActive}
-          onPress={() => setModalVisible(true)}
+          disabled={!canConfirm || (!holdActive && !draft.pendingBookingId)}
+          onPress={() => {
+            if (draft.pendingBookingId && draft.pendingInvoiceId) {
+              goToPayment(draft.pendingBookingId, draft.pendingInvoiceId);
+              return;
+            }
+            setModalVisible(true);
+          }}
         >
           <Text
             style={[
@@ -273,7 +373,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
               !canConfirm && styles.confirmTextDisabled,
             ]}
           >
-            CONFIRM ORDER
+            {draft.pendingBookingId ? 'CONTINUE TO PAYMENT' : 'CONFIRM ORDER'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -286,8 +386,8 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <Text style={styles.modalTitle}>Confirm order</Text>
             <Text style={styles.modalBody}>
-              We will process your audio service request and generate an
-              invoice for Razorpay checkout.
+              We’ll create your booking and open checkout. Complete payment to
+              confirm — technicians are assigned only after payment succeeds.
             </Text>
             <TouchableOpacity
               style={styles.placeBtn}
@@ -304,6 +404,21 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      <ThemedConfirmModal
+        visible={leaveConfirmOpen}
+        title="Leave booking?"
+        message="Are you sure you want to go back? Your booking details will be cleared and you’ll return to Categories."
+        confirmLabel="YES, GO BACK"
+        cancelLabel="STAY"
+        confirmDestructive
+        loading={leaving}
+        icon="arrow-back-outline"
+        onConfirm={confirmLeaveBooking}
+        onCancel={() => {
+          if (!leaving) setLeaveConfirmOpen(false);
+        }}
+      />
     </View>
   );
 };

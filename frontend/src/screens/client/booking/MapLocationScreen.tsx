@@ -109,7 +109,8 @@ export const MapLocationScreen: React.FC<Props> = ({ navigation, route }) => {
         lat: coords.lat,
         lng: coords.lng,
       }));
-      navigation.navigate('PlaceOrder');
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.navigate('PlaceOrder');
     } catch (e: any) {
       Alert.alert('Could not save location', e.message);
     } finally {

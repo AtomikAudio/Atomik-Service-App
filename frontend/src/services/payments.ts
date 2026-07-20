@@ -18,6 +18,8 @@ export interface Invoice {
     bookingId: string;
     serviceType: string;
     scheduledDate: string;
+    scheduledTime?: string;
+    status?: string;
     spareParts?: { name: string; quantity: number; unitCost: number }[];
   } | string;
   status: 'pending' | 'paid' | 'overdue' | 'cancelled';
@@ -111,14 +113,15 @@ export const paymentService = {
     payFor?: 'full' | 'extra_parts',
     couponCode?: string
   ) {
+    const code = String(couponCode ?? '').trim();
     return api.post('/payments/create-order', {
       invoiceId,
       payFor,
-      ...(couponCode ? { couponCode } : {}),
+      ...(code ? { couponCode: code } : {}),
     }) as Promise<{
       demo?: boolean;
       order: { id: string; amount: number; currency: string };
-      invoice: { invoiceNumber: string; totalAmount: number };
+      invoice: { invoiceNumber: string; totalAmount: number; balanceDue?: number };
       coupon?: {
         couponCode: string;
         discountPercent: number;

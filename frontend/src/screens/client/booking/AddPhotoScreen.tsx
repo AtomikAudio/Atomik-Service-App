@@ -53,10 +53,14 @@ export const AddPhotoScreen: React.FC<Props> = ({ navigation }) => {
       ...d,
       photos: d.photos.includes(preview) ? d.photos : [...d.photos, preview],
     }));
-    navigation.navigate('PlaceOrder');
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('PlaceOrder');
   };
 
-  const skip = () => navigation.navigate('PlaceOrder');
+  const skip = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('PlaceOrder');
+  };
 
   return (
     <View style={styles.container}>

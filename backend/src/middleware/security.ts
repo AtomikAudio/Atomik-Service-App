@@ -6,6 +6,11 @@ import xss from 'xss-clean';
 import { Express, Request, Response, NextFunction } from 'express';
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+/** Per-category limit (auth, OTP, password reset, payment verify, webhook). */
+const RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX) || 300;
+/** Overall `/api/*` cap (per IP / 15 min). Override with API_GLOBAL_RATE_LIMIT_MAX. */
+const GLOBAL_RATE_LIMIT_MAX =
+  Number(process.env.API_GLOBAL_RATE_LIMIT_MAX) || 15000;
 
 function skipRateLimitInTests(): boolean {
   return process.env.NODE_ENV === 'test';
@@ -47,8 +52,7 @@ export const applySecurityMiddleware = (app: Express): void => {
 /** All `/api/*` routes (per IP). Razorpay webhook is registered before this middleware. */
 export const globalApiLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  // Mobile clients poll notifications/tracking; 120/15m was far too low and blocked normal use.
-  max: Number(process.env.API_RATE_LIMIT_MAX) || 1000,
+  max: GLOBAL_RATE_LIMIT_MAX,
   message: 'Too many API requests. Please try again later.',
   // Local/dev traffic (Expo + hot reload + polling) should not trip the production guard.
   skip: () =>
@@ -59,31 +63,31 @@ export const globalApiLimiter = createLimiter({
 /** Unauthenticated auth POST endpoints: login, register, OTP verify, etc. */
 export const publicAuthLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 5,
+  max: RATE_LIMIT_MAX,
   message: 'Too many authentication attempts. Try again in 15 minutes.',
 });
 
 export const passwordResetLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 5,
+  max: RATE_LIMIT_MAX,
   message: 'Too many password reset attempts. Try again in 15 minutes.',
 });
 
 export const otpSendLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 5,
+  max: RATE_LIMIT_MAX,
   message: 'Too many OTP requests. Try again in 15 minutes.',
 });
 
 export const paymentVerifyLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 20,
+  max: RATE_LIMIT_MAX,
   message: 'Too many payment verification attempts. Try again later.',
 });
 
 /** Razorpay webhook — separate from global limiter; still bounded per IP. */
 export const webhookLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES_MS,
-  max: 60,
+  max: RATE_LIMIT_MAX,
   message: 'Too many webhook requests. Try again later.',
 });

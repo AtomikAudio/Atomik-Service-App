@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
@@ -15,6 +14,10 @@ import { Card } from '../../components/common/Card';
 import { FadeIn } from '../../components/common/FadeIn';
 import { PressableScale } from '../../components/common/PressableScale';
 import { LoadingView } from '../../components/common/LoadingView';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../../components/common/ThemedConfirmModal';
 import { bookingService, Booking } from '../../services/bookings';
 import { paymentService } from '../../services/payments';
 import {
@@ -64,6 +67,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Booking | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -82,32 +92,32 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, []);
 
-  const deleteBooking = (booking: Booking) => {
-    Alert.alert(
-      'Delete booking?',
-      `Delete booking ${booking.bookingId}? This cannot be undone.`,
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await bookingService.cancelBooking(
-                booking._id,
-                'Cancelled by client'
-              );
-              await load();
-              Alert.alert('Deleted', 'Your booking has been deleted.');
-            } catch (e: unknown) {
-              const msg =
-                e instanceof Error ? e.message : 'Could not delete booking';
-              Alert.alert('Failed', msg);
-            }
-          },
-        },
-      ]
-    );
+  const confirmDeleteBooking = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await bookingService.cancelBooking(
+        deleteTarget._id,
+        'Cancelled by client'
+      );
+      setDeleteTarget(null);
+      await load();
+      setResultAlert({
+        title: 'Cancelled',
+        message: 'Your booking has been cancelled.',
+        icon: 'checkmark-circle-outline',
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not cancel booking';
+      setResultAlert({
+        title: 'Could not cancel',
+        message: msg,
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   useFocusEffect(
@@ -243,6 +253,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={styles.techInlineText} numberOfLines={1}>
                           {tech.name}
                         </Text>
+                      ) : needsPay ? (
+                        <Text style={styles.awaitingTech} numberOfLines={2}>
+                          Complete payment to confirm
+                        </Text>
                       ) : (
                         <Text style={styles.awaitingTech}>Awaiting technician</Text>
                       )}
@@ -278,7 +292,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                           <Button
                             label="DELETE"
                             variant="outline"
-                            onPress={() => deleteBooking(item)}
+                            onPress={() => setDeleteTarget(item)}
                             style={styles.cardActionBtn}
                             textStyle={styles.cardActionBtnText}
                           />
@@ -340,6 +354,29 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </FadeIn>
       </SafeScrollView>
+
+      <ThemedConfirmModal
+        visible={!!deleteTarget}
+        title="Cancel booking?"
+        message="Cancel this booking? This cannot be undone."
+        confirmLabel="CANCEL BOOKING"
+        cancelLabel="KEEP"
+        confirmDestructive
+        loading={deleting}
+        icon="close-circle-outline"
+        onConfirm={confirmDeleteBooking}
+        onCancel={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+      />
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        onClose={() => setResultAlert(null)}
+      />
     </Screen>
   );
 };

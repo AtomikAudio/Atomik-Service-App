@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '../../components/common/Header';
@@ -15,6 +14,10 @@ import { Button } from '../../components/common/Button';
 import { LoadingView } from '../../components/common/LoadingView';
 import { ErrorView } from '../../components/common/ErrorView';
 import { PressableScale } from '../../components/common/PressableScale';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../../components/common/ThemedConfirmModal';
 import { bookingService, Booking } from '../../services/bookings';
 import {
   formatServiceTypeLabel,
@@ -36,6 +39,13 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
   const [items, setItems] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Booking | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,32 +68,32 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
     }, [load])
   );
 
-  const deleteBooking = (booking: Booking) => {
-    Alert.alert(
-      'Delete booking?',
-      `Delete booking ${booking.bookingId}? This cannot be undone.`,
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await bookingService.cancelBooking(
-                booking._id,
-                'Cancelled by client'
-              );
-              await load();
-              Alert.alert('Deleted', 'Your booking has been deleted.');
-            } catch (e: unknown) {
-              const msg =
-                e instanceof Error ? e.message : 'Could not delete booking';
-              Alert.alert('Failed', msg);
-            }
-          },
-        },
-      ]
-    );
+  const confirmDeleteBooking = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await bookingService.cancelBooking(
+        deleteTarget._id,
+        'Cancelled by client'
+      );
+      setDeleteTarget(null);
+      await load();
+      setResultAlert({
+        title: 'Cancelled',
+        message: 'Your booking has been cancelled.',
+        icon: 'checkmark-circle-outline',
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not cancel booking';
+      setResultAlert({
+        title: 'Could not cancel',
+        message: msg,
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -140,6 +150,10 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
                 {tech ? (
                   <Text style={styles.tech}>{tech.name}</Text>
+                ) : needsPay ? (
+                  <Text style={styles.awaiting}>
+                    Complete payment to confirm booking
+                  </Text>
                 ) : (
                   <Text style={styles.awaiting}>Awaiting technician</Text>
                 )}
@@ -173,7 +187,7 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
                     <Button
                       label="DELETE"
                       variant="outline"
-                      onPress={() => deleteBooking(item)}
+                      onPress={() => setDeleteTarget(item)}
                       style={styles.actionBtn}
                       textStyle={styles.actionBtnText}
                     />
@@ -188,13 +202,36 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
           );
         }}
       />
+
+      <ThemedConfirmModal
+        visible={!!deleteTarget}
+        title="Cancel booking?"
+        message="Cancel this booking? This cannot be undone."
+        confirmLabel="CANCEL BOOKING"
+        cancelLabel="KEEP"
+        confirmDestructive
+        loading={deleting}
+        icon="close-circle-outline"
+        onConfirm={confirmDeleteBooking}
+        onCancel={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+      />
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        onClose={() => setResultAlert(null)}
+      />
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  content: { padding: 20, gap: 12, paddingBottom: 40 },
-  cardWrap: { marginBottom: 2 },
+  content: { padding: 20, paddingBottom: 40 },
+  cardWrap: { marginBottom: 14 },
   serviceType: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 15,

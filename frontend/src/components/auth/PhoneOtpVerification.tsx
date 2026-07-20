@@ -1,9 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  Pressable,
+  TouchableOpacity,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { authService, OtpPurpose } from '../../services/auth';
 import { COLORS } from '../../constants/colors';
+import { formatRateLimitMessage } from '../../utils/rateLimitMessage';
 
 interface Props {
   phone: string;
@@ -13,6 +23,40 @@ interface Props {
   phoneError?: string;
   otpError?: string;
   onClearOtpError?: () => void;
+  /** Shown under the send button after phone is verified */
+  verifiedHint?: string;
+}
+
+function isAccountExistsError(err: {
+  message?: string;
+  status?: number;
+}): boolean {
+  const lower = String(err?.message || '').toLowerCase();
+  return (
+    err?.status === 409 ||
+    lower.includes('already registered') ||
+    lower.includes('already exists')
+  );
+}
+
+function friendlyOtpSendError(
+  err: { message?: string; status?: number; retryAfter?: number },
+  purpose: OtpPurpose
+): string {
+  const raw = String(err?.message || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (isAccountExistsError(err)) {
+    return 'Account already exists';
+  }
+
+  if (err?.status === 404 || lower.includes('no account found')) {
+    return purpose === 'forgot_password'
+      ? 'No account found for this phone number. Check the number or create an account.'
+      : raw || 'No account found for this phone number.';
+  }
+
+  return formatRateLimitMessage(err, raw || 'Could not send verification code');
 }
 
 export const PhoneOtpVerification: React.FC<Props> = ({
@@ -23,7 +67,9 @@ export const PhoneOtpVerification: React.FC<Props> = ({
   phoneError,
   otpError,
   onClearOtpError,
+  verifiedHint = 'Phone verified — you can continue',
 }) => {
+  const navigation = useNavigation<any>();
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
@@ -31,6 +77,7 @@ export const PhoneOtpVerification: React.FC<Props> = ({
   const [verifying, setVerifying] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [localOtpError, setLocalOtpError] = useState('');
+  const [accountExistsOpen, setAccountExistsOpen] = useState(false);
   const verifyLock = useRef(false);
   const sendLock = useRef(false);
 
@@ -49,14 +96,13 @@ export const PhoneOtpVerification: React.FC<Props> = ({
     setPhoneVerified(false);
     setLocalOtpError('');
     setResendIn(0);
+    setAccountExistsOpen(false);
     verifyLock.current = false;
     sendLock.current = false;
     onVerifiedChange?.(false);
     onOtpChange?.('');
-    // Reset only when the target phone/purpose changes — not when callback
-    // identities change — so a successful send is never wiped mid-flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone, purpose]);
+  }, [digits, purpose]);
 
   const setVerified = useCallback(
     (value: boolean) => {
@@ -67,10 +113,7 @@ export const PhoneOtpVerification: React.FC<Props> = ({
   );
 
   const handleSendOtp = async () => {
-    // Block invalid, already-verified, in-flight, or cooled-down sends.
     if (!phoneReady || phoneVerified || sendingOtp || resendIn > 0) return;
-    // Synchronous guard: stops a burst of rapid taps from firing parallel
-    // requests before React re-renders the disabled button.
     if (sendLock.current) return;
     sendLock.current = true;
 
@@ -79,24 +122,26 @@ export const PhoneOtpVerification: React.FC<Props> = ({
     onClearOtpError?.();
     setOtp('');
     onOtpChange?.('');
-    // Lock the button for 30s the instant the user taps, regardless of how
-    // fast/slow the response is, so it can't be spammed.
-    setResendIn(30);
+
     try {
       const result = await authService.sendOtp(phone, purpose);
       setOtpSent(true);
       setResendIn(result.resendAfter || 30);
     } catch (err: any) {
-      if (typeof err.retryAfter === 'number' && err.retryAfter > 0) {
-        // Backend says an OTP was recently sent — reveal the input so the
-        // user can enter the code that already went out.
-        setResendIn(err.retryAfter);
-        setOtpSent(true);
-      } else {
-        // Hard failure (e.g. network / no account) — unlock so they can retry.
+      if (isAccountExistsError(err)) {
+        setOtpSent(false);
         setResendIn(0);
+        setLocalOtpError('');
+        setAccountExistsOpen(true);
+      } else if (typeof err.retryAfter === 'number' && err.retryAfter > 0) {
+        setOtpSent(true);
+        setResendIn(err.retryAfter);
+        setLocalOtpError(friendlyOtpSendError(err, purpose));
+      } else {
+        setOtpSent(false);
+        setResendIn(0);
+        setLocalOtpError(friendlyOtpSendError(err, purpose));
       }
-      setLocalOtpError(err.message || 'Could not send code');
     } finally {
       setSendingOtp(false);
       sendLock.current = false;
@@ -120,13 +165,24 @@ export const PhoneOtpVerification: React.FC<Props> = ({
       setVerified(true);
       onOtpChange?.(code);
     } catch (err: any) {
-      setLocalOtpError(err.message || 'Invalid verification code');
+      setLocalOtpError(
+        formatRateLimitMessage(err, 'Invalid verification code')
+      );
       setVerified(false);
     } finally {
       setVerifying(false);
       verifyLock.current = false;
     }
-  }, [otp, otpSent, onClearOtpError, phone, phoneVerified, purpose, setVerified, onOtpChange]);
+  }, [
+    otp,
+    otpSent,
+    onClearOtpError,
+    phone,
+    phoneVerified,
+    purpose,
+    setVerified,
+    onOtpChange,
+  ]);
 
   useEffect(() => {
     if (!otpSent || phoneVerified || otp.trim().length !== 6) return;
@@ -138,19 +194,29 @@ export const PhoneOtpVerification: React.FC<Props> = ({
 
   const displayOtpError = otpError || localOtpError;
 
+  const sendLabel = phoneVerified
+    ? 'VERIFIED'
+    : otpSent
+      ? resendIn > 0
+        ? `RESEND IN ${resendIn}s`
+        : 'RESEND OTP'
+      : 'SEND OTP';
+
+  const goSignIn = () => {
+    setAccountExistsOpen(false);
+    navigation.navigate('Login');
+  };
+
+  const goForgotPassword = () => {
+    setAccountExistsOpen(false);
+    navigation.navigate('ForgotPassword');
+  };
+
   return (
     <View style={styles.root}>
       <View style={styles.otpRow}>
         <Button
-          label={
-            phoneVerified
-              ? 'VERIFIED'
-              : otpSent
-                ? resendIn > 0
-                  ? `RESEND IN ${resendIn}s`
-                  : 'RESEND OTP'
-                : 'SEND OTP'
-          }
+          label={sendLabel}
           onPress={handleSendOtp}
           loading={sendingOtp && !phoneVerified}
           verified={phoneVerified}
@@ -160,15 +226,21 @@ export const PhoneOtpVerification: React.FC<Props> = ({
           variant="outline"
           style={styles.otpBtn}
         />
-        <Text style={styles.otpHint}>
-          {phoneVerified
-            ? 'Phone verified — you can create your account'
-            : otpSent
-              ? 'Enter the code from SMS'
-              : phoneError
-                ? ''
-                : 'We will text you a 6-digit code'}
-        </Text>
+        {displayOtpError && !otpSent ? (
+          <Text style={styles.errorText}>{displayOtpError}</Text>
+        ) : (
+          <Text style={styles.otpHint}>
+            {phoneVerified
+              ? verifiedHint
+              : otpSent
+                ? 'Enter the 6-digit code from SMS, then tap Enter OTP'
+                : phoneError
+                  ? ''
+                  : phoneReady
+                    ? 'We will text you a 6-digit code'
+                    : 'Enter your 10-digit mobile number to receive OTP'}
+          </Text>
+        )}
       </View>
 
       {otpSent && !phoneVerified ? (
@@ -189,7 +261,7 @@ export const PhoneOtpVerification: React.FC<Props> = ({
             error={displayOtpError}
           />
           <Button
-            label={verifying ? 'VERIFYING…' : 'VERIFY PHONE'}
+            label={verifying ? 'VERIFYING…' : 'ENTER OTP'}
             onPress={handleVerify}
             loading={verifying}
             disabled={verifying || otp.trim().length !== 6}
@@ -197,6 +269,51 @@ export const PhoneOtpVerification: React.FC<Props> = ({
           />
         </>
       ) : null}
+
+      <Modal
+        visible={accountExistsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountExistsOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setAccountExistsOpen(false)}
+        >
+          <Pressable
+            style={styles.modalCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalIcon}>
+              <Ionicons
+                name="person-circle-outline"
+                size={42}
+                color={COLORS.red}
+              />
+            </View>
+            <Text style={styles.modalTitle}>Account already exists</Text>
+            <Text style={styles.modalBody}>
+              This phone number is already registered. Sign in with your
+              password, or reset it if you forgot.
+            </Text>
+            <TouchableOpacity style={styles.modalPrimary} onPress={goSignIn}>
+              <Text style={styles.modalPrimaryText}>SIGN IN</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalSecondary}
+              onPress={goForgotPassword}
+            >
+              <Text style={styles.modalSecondaryText}>FORGOT PASSWORD</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAccountExistsOpen(false)}
+              style={styles.modalDismiss}
+            >
+              <Text style={styles.modalDismissText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -217,9 +334,102 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     textAlign: 'center',
+    lineHeight: 16,
+  },
+  errorText: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 12,
+    color: COLORS.red,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   verifyBtn: {
     marginTop: -4,
     marginBottom: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  modalIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.redMuted,
+    borderWidth: 1,
+    borderColor: COLORS.borderActive,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 18,
+    color: COLORS.white,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  modalBody: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    color: COLORS.gray,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  modalPrimary: {
+    alignSelf: 'stretch',
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: COLORS.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  modalPrimaryText: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 12,
+    color: COLORS.white,
+    letterSpacing: 1.5,
+  },
+  modalSecondary: {
+    alignSelf: 'stretch',
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.borderActive,
+    backgroundColor: COLORS.redMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  modalSecondaryText: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 12,
+    color: COLORS.white,
+    letterSpacing: 1.2,
+  },
+  modalDismiss: {
+    paddingVertical: 10,
+  },
+  modalDismissText: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 13,
+    color: COLORS.gray,
   },
 });

@@ -19,6 +19,7 @@ import { keyboardBehavior } from '../../utils/layout';
 import { authService } from '../../services/auth';
 import { useDispatch } from 'react-redux';
 import { setAuth } from '../../store/authSlice';
+import { formatRateLimitMessage } from '../../utils/rateLimitMessage';
 
 interface Props {
   navigation: any;
@@ -59,7 +60,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         })
       );
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message || 'Invalid credentials');
+      Alert.alert(
+        err?.status === 429 ? 'Too many attempts' : 'Login Failed',
+        formatRateLimitMessage(
+          err,
+          'Too many authentication attempts. Please try again later.'
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -178,7 +185,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.gray,
     marginBottom: 32,
-    lineHeight: 18,
+    lineHeight: 22,
   },
   form: {
     flex: 1,

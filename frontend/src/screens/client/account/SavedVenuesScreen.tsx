@@ -7,6 +7,7 @@ import { Screen } from '../../../components/common/Screen';
 import { SafeScrollView } from '../../../components/common/SafeScrollView';
 import { Card } from '../../../components/common/Card';
 import { LoadingView } from '../../../components/common/LoadingView';
+import { PressableScale } from '../../../components/common/PressableScale';
 import { navigateProfileScreen } from '../../../navigation/profileNavigation';
 import { venueService, Venue } from '../../../services/venues';
 import { COLORS } from '../../../constants/colors';
@@ -52,19 +53,39 @@ export const SavedVenuesScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           ) : (
             venues.map((v) => (
-              <Card key={v._id} padding={16} style={styles.card}>
-                <View style={styles.row}>
-                  <Ionicons name="location-outline" size={20} color={COLORS.red} />
-                  <View style={styles.cardBody}>
-                    <Text style={styles.name}>{v.name}</Text>
-                    <Text style={styles.line}>
-                      {[v.address, v.area, v.city, v.pincode]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </Text>
+              <PressableScale
+                key={v._id}
+                onPress={() =>
+                  navigateProfileScreen(navigation, 'AddressDetails', {
+                    venue: v,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Open details for ${v.name}`}
+              >
+                <Card padding={16} style={styles.card}>
+                  <View style={styles.row}>
+                    <Ionicons
+                      name="location-outline"
+                      size={20}
+                      color={COLORS.red}
+                    />
+                    <View style={styles.cardBody}>
+                      <Text style={styles.name}>{v.name}</Text>
+                      <Text style={styles.line}>
+                        {[v.address, v.area, v.city, v.pincode]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={COLORS.grayDark}
+                    />
                   </View>
-                </View>
-              </Card>
+                </Card>
+              </PressableScale>
             ))
           )}
         </SafeScrollView>

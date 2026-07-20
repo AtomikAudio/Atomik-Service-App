@@ -6,16 +6,20 @@ function navigatorHasScreen(nav: { getState?: () => { routeNames?: string[] } },
 }
 
 /** Navigate to a profile sub-screen from ProfileMain (works with tab + stack nesting). */
-export function navigateProfileScreen(navigation: any, screen: ProfileScreenName) {
+export function navigateProfileScreen(
+  navigation: any,
+  screen: ProfileScreenName,
+  params?: Record<string, unknown>
+) {
   if (navigatorHasScreen(navigation, screen)) {
-    navigation.navigate(screen);
+    navigation.navigate(screen, params);
     return;
   }
 
   let parent = navigation.getParent?.();
   while (parent) {
     if (navigatorHasScreen(parent, screen)) {
-      parent.navigate(screen);
+      parent.navigate(screen, params);
       return;
     }
     parent = parent.getParent?.();
@@ -24,7 +28,7 @@ export function navigateProfileScreen(navigation: any, screen: ProfileScreenName
   navigation.dispatch(
     CommonActions.navigate({
       name: 'Account',
-      params: { screen },
+      params: { screen, params },
     })
   );
 }

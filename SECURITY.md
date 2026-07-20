@@ -26,7 +26,7 @@ Rate limiting is **disabled in `NODE_ENV=test`** so automated tests are not affe
 
 | Scope | Window | Max requests | Notes |
 |-------|--------|--------------|--------|
-| All `/api/*` routes | 15 minutes | **120** per IP | Applied in `server.ts` before route handlers |
+| All `/api/*` routes | 15 minutes | **15000** per IP (or `API_GLOBAL_RATE_LIMIT_MAX`) | Skipped in non-production unless `ENABLE_API_RATE_LIMIT=1` |
 
 **Excluded from global limiter:** `POST /api/payments/webhook` (uses dedicated `webhookLimiter` + HMAC verification instead).
 
@@ -36,22 +36,22 @@ Rate limiting is **disabled in `NODE_ENV=test`** so automated tests are not affe
 
 | Route(s) | Window | Max attempts | Middleware |
 |------------|--------|--------------|------------|
-| `POST /api/auth/login` | 15 min | **5** | `publicAuthLimiter` |
-| `POST /api/auth/login/phone` | 15 min | **5** | `publicAuthLimiter` |
-| `POST /api/auth/register` | 15 min | **5** | `publicAuthLimiter` |
-| `POST /api/auth/register/technician` | 15 min | **5** | `publicAuthLimiter` |
-| `POST /api/auth/verify-otp` | 15 min | **5** | `publicAuthLimiter` |
-| `POST /api/auth/send-otp` | 15 min | **5** | `otpSendLimiter` |
-| `POST /api/auth/forgot-password` | 15 min | **5** | `passwordResetLimiter` |
-| `POST /api/auth/reset-password` | 15 min | **5** | `passwordResetLimiter` |
+| `POST /api/auth/login` | 15 min | **300** | `publicAuthLimiter` |
+| `POST /api/auth/login/phone` | 15 min | **300** | `publicAuthLimiter` |
+| `POST /api/auth/register` | 15 min | **300** | `publicAuthLimiter` |
+| `POST /api/auth/register/technician` | 15 min | **300** | `publicAuthLimiter` |
+| `POST /api/auth/verify-otp` | 15 min | **300** | `publicAuthLimiter` |
+| `POST /api/auth/send-otp` | 15 min | **300** | `otpSendLimiter` |
+| `POST /api/auth/forgot-password` | 15 min | **300** | `passwordResetLimiter` |
+| `POST /api/auth/reset-password` | 15 min | **300** | `passwordResetLimiter` |
 
-Auth routes are subject to **both** the global API limit and the stricter auth limit above (whichever is hit first blocks the request).
+Auth routes are subject to **both** the global API limit and their category limit (whichever is hit first blocks the request).
 
 ### Payments
 
 | Route | Window | Max attempts | Middleware |
 |-------|--------|--------------|------------|
-| `POST /api/payments/verify` | 15 min | **20** | `paymentVerifyLimiter` |
+| `POST /api/payments/verify` | 15 min | **300** | `paymentVerifyLimiter` |
 
 Other payment routes (`create-order`, `invoices`) rely on JWT authentication and the global API limit.
 
@@ -59,7 +59,7 @@ Other payment routes (`create-order`, `invoices`) rely on JWT authentication and
 
 | Route | Window | Max requests | Body limit |
 |-------|--------|--------------|------------|
-| `POST /api/payments/webhook` | 15 min | **60** per IP | **64 KB** raw body |
+| `POST /api/payments/webhook` | 15 min | **300** per IP | **64 KB** raw body |
 
 ### Implementation
 
@@ -280,7 +280,7 @@ Full codebase audit performed on backend API, frontend bundle, secrets hygiene, 
 | Master/admin could assign completed/cancelled jobs | **High** | `isBookingAssignable()` blocks `completed` and `cancelled` |
 | Demo payment bypass on network-exposed dev API | **High** | Demo payments limited to **localhost** unless `ALLOW_DEMO_PAYMENTS=true` |
 | Technician IDOR on `GET /api/bookings/:id` | **Medium** | Technicians may only view assigned jobs or open-pool jobs; pool view redacts client phone/email and full venue address |
-| Razorpay webhook unbounded body / no rate limit | **Medium** | 64 KB body cap; `webhookLimiter` (60 req / 15 min per IP) |
+| Razorpay webhook unbounded body / no rate limit | **Medium** | 64 KB body cap; `webhookLimiter` (300 req / 15 min per IP) |
 | Demo password in production app bundle | **Medium** | Offline demo auth gated to `__DEV__` only (removed `EXPO_PUBLIC_ENABLE_DEMO_AUTH`) |
 | Rate limits wrong behind reverse proxy | **Medium** | `trust proxy` enabled in production |
 | `deleteVenue` returned 200 for non-owned venues | **Low** | Returns **404** when venue not found or not owned |

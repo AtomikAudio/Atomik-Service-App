@@ -65,9 +65,14 @@ export function quotedSparePartsWithTax(
 
 function baseServiceWasPaid(invoice: InvoiceLike): boolean {
   if (!invoice || typeof invoice === 'string') return false;
-  const paid = invoice.amountPaid ?? 0;
-  if (paid > 0) return true;
-  return !!(invoice.paidAt && (invoice.spareParts ?? 0) > 0);
+  if ((invoice.amountPaid ?? 0) > 0) return true;
+  if (invoice.status === 'paid') return true;
+  return !!invoice.paidAt;
+}
+
+/** True when the client has paid the base service (extra-parts top-ups may still be due). */
+export function hasBaseServicePayment(invoice: InvoiceLike): boolean {
+  return baseServiceWasPaid(invoice);
 }
 
 /** Charge amount for technician-quoted spare parts (incl. GST), capped by balance due. */

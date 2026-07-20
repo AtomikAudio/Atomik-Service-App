@@ -68,7 +68,8 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
       body: new URLSearchParams({
         To: to,
         From: config.fromNumber,
-        Body: code,
+        // Branded body improves deliverability vs a bare numeric code.
+        Body: `ATOMIK Audio: Your verification code is ${code}. Valid for 10 minutes. Do not share this code.`,
       }),
     }
   );
@@ -85,8 +86,16 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
     if (response.status === 400 && detail.includes('21211')) {
       throw new Error('Invalid phone number. Use format +91XXXXXXXXXX');
     }
+    // Twilio trial accounts can only SMS verified numbers.
+    if (detail.includes('21608') || detail.includes('unverified')) {
+      throw new Error(
+        'This phone number is not verified for SMS. On a Twilio trial account, verify the number in the Twilio console, or upgrade the account.'
+      );
+    }
 
-    throw new Error('Could not send verification SMS. Check the phone number and Twilio settings.');
+    throw new Error(
+      'Could not send verification SMS. Check the phone number and Twilio settings.'
+    );
   }
 
   if (process.env.NODE_ENV !== 'production') {

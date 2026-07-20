@@ -104,9 +104,11 @@ export const SplashScreen: React.FC<Props> = ({ navigation }) => {
             resizeMode="contain"
             accessibilityLabel="ATOMIK"
           />
-          <Animated.View style={{ opacity: taglineOpacity }}>
-            <Text style={styles.tagline}>PRECISION AUDIO</Text>
-            <Text style={styles.tagline}>SERVICE INFRASTRUCTURE</Text>
+          <Animated.View style={[styles.taglineWrap, { opacity: taglineOpacity }]}>
+            <Text style={styles.tagline}>AUDIO ENGINEERING AND DESIGN</Text>
+            <Text style={[styles.tagline, styles.taglineBottom]}>
+              SERVICE INFRASTRUCTURE
+            </Text>
           </Animated.View>
         </Animated.View>
       </View>
@@ -157,14 +159,20 @@ const styles = StyleSheet.create({
     height: LOGO_H,
     backgroundColor: 'transparent',
   },
+  taglineWrap: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
   tagline: {
     fontFamily: 'Montserrat_300Light',
     fontSize: 10,
     color: 'rgba(255,255,255,0.55)',
     letterSpacing: 3.5,
     textAlign: 'center',
-    marginTop: 16,
     lineHeight: 15,
+  },
+  taglineBottom: {
+    marginTop: 18,
   },
   buttons: {
     position: 'absolute',
