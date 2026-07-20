@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { RootState } from '../store';
-import { registerForPushNotifications } from '../services/pushNotifications';
+import { RootState } from '../../store';
+import { registerForPushNotifications } from '../../services/pushNotifications';
 
 /**
  * When the user is signed in, request notification permission and register

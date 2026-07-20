@@ -1,17 +1,36 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import api from './api';
+import type * as NotificationsTypes from 'expo-notifications';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+/**
+ * Expo Go (SDK 53+) removed remote push support, and merely importing
+ * expo-notifications there logs an error. Load the module lazily and only
+ * outside Expo Go (development/production builds).
+ */
+function canUseRemotePush(): boolean {
+  return Constants.appOwnership !== 'expo';
+}
+
+let notificationsModule: typeof NotificationsTypes | null = null;
+
+function getNotifications(): typeof NotificationsTypes | null {
+  if (!canUseRemotePush()) return null;
+  if (!notificationsModule) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    notificationsModule = require('expo-notifications') as typeof NotificationsTypes;
+    notificationsModule.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+  return notificationsModule;
+}
 
 function getExpoProjectId(): string | undefined {
   return (
@@ -21,7 +40,9 @@ function getExpoProjectId(): string | undefined {
   );
 }
 
-async function ensureAndroidChannel(): Promise<void> {
+async function ensureAndroidChannel(
+  Notifications: typeof NotificationsTypes
+): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('default', {
     name: 'ATOMIK',
@@ -35,10 +56,21 @@ async function ensureAndroidChannel(): Promise<void> {
 /**
  * Request permission, obtain an Expo push token, and register it with the API
  * so the backend can deliver system notification-bar alerts.
+ * No-ops in Expo Go (use a development build for real device pushes).
  */
 export async function registerForPushNotifications(): Promise<string | null> {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    if (__DEV__) {
+      console.log(
+        '[push] Skipped in Expo Go — use a development build for system notifications'
+      );
+    }
+    return null;
+  }
+
   try {
-    await ensureAndroidChannel();
+    await ensureAndroidChannel(Notifications);
 
     const current = await Notifications.getPermissionsAsync();
     let status = current.status;
@@ -69,13 +101,21 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 export function addNotificationReceivedListener(
-  listener: (notification: Notifications.Notification) => void
+  listener: (notification: NotificationsTypes.Notification) => void
 ) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return { remove: () => undefined };
+  }
   return Notifications.addNotificationReceivedListener(listener);
 }
 
 export function addNotificationResponseListener(
-  listener: (response: Notifications.NotificationResponse) => void
+  listener: (response: NotificationsTypes.NotificationResponse) => void
 ) {
+  const Notifications = getNotifications();
+  if (!Notifications) {
+    return { remove: () => undefined };
+  }
   return Notifications.addNotificationResponseReceivedListener(listener);
 }
