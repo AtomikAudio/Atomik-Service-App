@@ -40,7 +40,7 @@ module.exports = {
   expo: {
     name: 'ATOMIK Audio',
     slug: 'atomik-audio',
-    version: '1.0.1',
+    version: '1.1.2',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'dark',
