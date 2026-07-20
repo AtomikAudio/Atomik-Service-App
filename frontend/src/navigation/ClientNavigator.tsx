@@ -20,7 +20,8 @@ import { OrderDetailsScreen } from '../screens/client/booking/OrderDetailsScreen
 import { AddPhotoScreen } from '../screens/client/booking/AddPhotoScreen';
 import { ScheduleBookingScreen } from '../screens/client/booking/ScheduleBookingScreen';
 import { ServiceSubcategoriesScreen } from '../screens/client/booking/ServiceSubcategoriesScreen';
-import { BookingDraftProvider } from '../context/BookingDraftContext';
+import { BookingDraftProvider, useBookingDraft } from '../context/BookingDraftContext';
+import { BookingLeaveConfirmModal } from '../components/booking/BookingLeaveConfirmModal';
 import { defaultStackOptions } from './screenOptions';
 import { createTabBarScreenOptions } from './tabBarOptions';
 
@@ -81,42 +82,80 @@ const tabBarIcon = (routeName: string, focused: boolean, color: string, size: nu
 
 const ClientTabs = () => {
   const insets = useSafeAreaInsets();
+  const { isBookingInProgress, requestLeaveBooking } = useBookingDraft();
+
+  const guardTabPress = (
+    e: { preventDefault: () => void },
+    proceed: () => void
+  ) => {
+    if (!isBookingInProgress) {
+      proceed();
+      return;
+    }
+    e.preventDefault();
+    requestLeaveBooking(proceed);
+  };
 
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) =>
-        createTabBarScreenOptions(insets, {
-          tabBarIcon: ({ focused, color, size }) =>
-            tabBarIcon(route.name, focused, color, size),
-        })
-      }
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeStack}
-        listeners={({ navigation }) => ({
-          tabPress: () => {
-            // Return to the home dashboard — don't restore a nested
-            // Notifications / booking screen left on this stack.
-            navigation.navigate('Home', { screen: 'HomeMain' });
-          },
-        })}
-      />
-      <Tab.Screen
-        name="Services"
-        component={ServicesStack}
-        listeners={({ navigation }) => ({
-          tabPress: () => {
-            navigation.navigate('Services', {
-              screen: 'ServiceCategories',
-              params: { reset: true },
-            });
-          },
-        })}
-      />
-      <Tab.Screen name="Payments" component={PaymentsStack} />
-      <Tab.Screen name="Account" component={AccountStack} />
-    </Tab.Navigator>
+    <>
+      <Tab.Navigator
+        screenOptions={({ route }) =>
+          createTabBarScreenOptions(insets, {
+            tabBarIcon: ({ focused, color, size }) =>
+              tabBarIcon(route.name, focused, color, size),
+          })
+        }
+      >
+        <Tab.Screen
+          name="Home"
+          component={HomeStack}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              guardTabPress(e, () => {
+                navigation.navigate('Home', { screen: 'HomeMain' });
+              });
+            },
+          })}
+        />
+        <Tab.Screen
+          name="Services"
+          component={ServicesStack}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              guardTabPress(e, () => {
+                navigation.navigate('Services', {
+                  screen: 'ServiceCategories',
+                  params: { reset: true },
+                });
+              });
+            },
+          })}
+        />
+        <Tab.Screen
+          name="Payments"
+          component={PaymentsStack}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              guardTabPress(e, () => {
+                navigation.navigate('Payments');
+              });
+            },
+          })}
+        />
+        <Tab.Screen
+          name="Account"
+          component={AccountStack}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              guardTabPress(e, () => {
+                navigation.navigate('Account');
+              });
+            },
+          })}
+        />
+      </Tab.Navigator>
+      <BookingLeaveConfirmModal />
+    </>
   );
 };
 

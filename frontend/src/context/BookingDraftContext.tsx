@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { ApiServiceType, resolvePrimaryServiceType } from '../constants/audioServices';
+import { bookingService } from '../services/bookings';
 
 export const GENERAL_VISIT_CATEGORY_ID = 'general-visit';
 
@@ -26,6 +34,11 @@ const emptyDraft: BookingDraft = {
   photos: [],
 };
 
+type LeaveOptions = {
+  /** Show the leave confirm even if the draft looks empty (e.g. Place Order back). */
+  force?: boolean;
+};
+
 interface BookingDraftContextValue {
   draft: BookingDraft;
   setDraft: React.Dispatch<React.SetStateAction<BookingDraft>>;
@@ -34,16 +47,52 @@ interface BookingDraftContextValue {
   removeCategory: (id: string) => void;
   primaryServiceType: () => ApiServiceType;
   canConfirm: boolean;
+  /** True when the user has started a booking that would be lost on leave. */
+  isBookingInProgress: boolean;
+  leaveConfirmOpen: boolean;
+  leaveConfirmLoading: boolean;
+  /**
+   * Ask before abandoning the booking. Returns true if the leave was blocked
+   * (confirm modal shown). Returns false if leave proceeded immediately.
+   */
+  requestLeaveBooking: (
+    afterLeave?: () => void,
+    options?: LeaveOptions
+  ) => boolean;
+  confirmLeaveBooking: () => Promise<void>;
+  cancelLeaveBooking: () => void;
 }
 
 const BookingDraftContext = createContext<BookingDraftContextValue | null>(null);
+
+function draftHasProgress(draft: BookingDraft): boolean {
+  return Boolean(
+    draft.pendingBookingId ||
+      draft.pendingInvoiceId ||
+      draft.categoryIds.length > 0 ||
+      draft.venueId ||
+      draft.addressLabel ||
+      draft.scheduledDate ||
+      draft.scheduledTime ||
+      draft.slotHoldExpiresAt ||
+      (draft.details && draft.details.trim()) ||
+      draft.photos.length > 0
+  );
+}
 
 export const BookingDraftProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [draft, setDraft] = useState<BookingDraft>(emptyDraft);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaveConfirmLoading, setLeaveConfirmLoading] = useState(false);
+  const afterLeaveRef = useRef<(() => void) | undefined>(undefined);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   const resetDraft = useCallback(() => setDraft(emptyDraft), []);
+
+  const isBookingInProgress = useMemo(() => draftHasProgress(draft), [draft]);
 
   const addCategory = useCallback((id: string) => {
     setDraft((d) => {
@@ -90,6 +139,56 @@ export const BookingDraftProvider: React.FC<{ children: React.ReactNode }> = ({
       draft.scheduledTime
   );
 
+  const requestLeaveBooking = useCallback(
+    (afterLeave?: () => void, options?: LeaveOptions) => {
+      const shouldGuard = options?.force || draftHasProgress(draftRef.current);
+      if (!shouldGuard) {
+        afterLeave?.();
+        return false;
+      }
+      afterLeaveRef.current = afterLeave;
+      setLeaveConfirmOpen(true);
+      return true;
+    },
+    []
+  );
+
+  const cancelLeaveBooking = useCallback(() => {
+    if (leaveConfirmLoading) return;
+    afterLeaveRef.current = undefined;
+    setLeaveConfirmOpen(false);
+  }, [leaveConfirmLoading]);
+
+  const confirmLeaveBooking = useCallback(async () => {
+    setLeaveConfirmLoading(true);
+    const current = draftRef.current;
+    try {
+      if (current.pendingBookingId) {
+        try {
+          await bookingService.cancelBooking(
+            current.pendingBookingId,
+            'Left booking flow before payment'
+          );
+        } catch {
+          // Draft still clears so the user can start fresh.
+        }
+      } else {
+        try {
+          await bookingService.releaseSlotHold();
+        } catch {
+          // Hold may already be gone.
+        }
+      }
+    } finally {
+      resetDraft();
+      setLeaveConfirmLoading(false);
+      setLeaveConfirmOpen(false);
+      const after = afterLeaveRef.current;
+      afterLeaveRef.current = undefined;
+      after?.();
+    }
+  }, [resetDraft]);
+
   return (
     <BookingDraftContext.Provider
       value={{
@@ -100,6 +199,12 @@ export const BookingDraftProvider: React.FC<{ children: React.ReactNode }> = ({
         removeCategory,
         primaryServiceType,
         canConfirm,
+        isBookingInProgress,
+        leaveConfirmOpen,
+        leaveConfirmLoading,
+        requestLeaveBooking,
+        confirmLeaveBooking,
+        cancelLeaveBooking,
       }}
     >
       {children}

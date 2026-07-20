@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import { OrderActionRow } from '../../../components/booking/OrderActionRow';
-import { ThemedConfirmModal } from '../../../components/common/ThemedConfirmModal';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { getServiceById } from '../../../constants/audioServices';
 import { bookingService } from '../../../services/bookings';
@@ -33,12 +32,10 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
     removeCategory,
     canConfirm,
     primaryServiceType,
-    resetDraft,
+    requestLeaveBooking,
   } = useBookingDraft();
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(
     draft.slotHoldExpiresAt ?? null
   );
@@ -177,31 +174,17 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const confirmLeaveBooking = async () => {
-    setLeaving(true);
-    try {
-      if (draft.pendingBookingId) {
-        try {
-          await bookingService.cancelBooking(
-            draft.pendingBookingId,
-            'Left booking flow before payment'
-          );
-        } catch {
-          // Ignore — draft still clears so the user can start fresh.
-        }
-      }
-    } finally {
-      resetDraft();
-      setLeaving(false);
-      setLeaveConfirmOpen(false);
-      navigation.navigate('ServiceCategories', { reset: true });
-    }
-  };
+  const askLeaveBooking = useCallback(() => {
+    requestLeaveBooking(
+      () => navigation.navigate('ServiceCategories', { reset: true }),
+      { force: true }
+    );
+  }, [requestLeaveBooking, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       const onHardwareBack = () => {
-        setLeaveConfirmOpen(true);
+        askLeaveBooking();
         return true;
       };
       const sub = BackHandler.addEventListener(
@@ -209,14 +192,14 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         onHardwareBack
       );
       return () => sub.remove();
-    }, [])
+    }, [askLeaveBooking])
   );
 
   return (
     <View style={styles.container}>
       <BookingFlowHeader
         title={headerTitle}
-        onBack={() => setLeaveConfirmOpen(true)}
+        onBack={askLeaveBooking}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         {holdActive ? (
@@ -404,21 +387,6 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-
-      <ThemedConfirmModal
-        visible={leaveConfirmOpen}
-        title="Leave booking?"
-        message="Are you sure you want to go back? Your booking details will be cleared and you’ll return to Categories."
-        confirmLabel="YES, GO BACK"
-        cancelLabel="STAY"
-        confirmDestructive
-        loading={leaving}
-        icon="arrow-back-outline"
-        onConfirm={confirmLeaveBooking}
-        onCancel={() => {
-          if (!leaving) setLeaveConfirmOpen(false);
-        }}
-      />
     </View>
   );
 };
