@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { Header } from '../../components/common/Header';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -46,9 +47,11 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
     goBack?: boolean;
   } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const b = await bookingService.getBookingById(id);
       setBooking(b);
@@ -59,9 +62,9 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
       });
       setInvoice(inv ?? null);
     } catch (e: any) {
-      setError(e.message || 'Failed to load');
+      if (!silent) setError(e.message || 'Failed to load');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
@@ -70,6 +73,8 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
       load();
     }, [load])
   );
+
+  useLiveRefresh(() => load(true));
 
   const confirmCancelBooking = async () => {
     if (!booking) return;

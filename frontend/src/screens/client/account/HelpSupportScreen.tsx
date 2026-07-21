@@ -14,8 +14,8 @@ export const HelpSupportScreen: React.FC = () => (
       <TouchableOpacity onPress={() => Linking.openURL('mailto:support@atomik.demo')}>
         <Text style={styles.link}>support@atomik.demo</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => Linking.openURL('tel:+919876543210')}>
-        <Text style={[styles.link, styles.linkSpaced]}>+91 98765 43210</Text>
+      <TouchableOpacity onPress={() => Linking.openURL('tel:+918088675627')}>
+        <Text style={[styles.link, styles.linkSpaced]}>+91 80886 75627</Text>
       </TouchableOpacity>
     </Card>
     <Card padding={16} style={styles.card}>

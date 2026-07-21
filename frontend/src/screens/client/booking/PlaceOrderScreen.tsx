@@ -202,16 +202,6 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         onBack={askLeaveBooking}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {holdActive ? (
-          <View style={styles.holdBanner}>
-            <Ionicons name="time-outline" size={18} color={COLORS.white} />
-            <Text style={styles.holdBannerText}>
-              Slot held — {Math.max(0, Math.ceil(secondsLeft / 60))} min left to
-              confirm
-            </Text>
-          </View>
-        ) : null}
-
         {!holdActive && draft.scheduledTime ? (
           <View style={styles.holdExpiredBanner}>
             <Text style={styles.holdExpiredText}>
@@ -394,22 +384,6 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scroll: { padding: 20, paddingBottom: 120 },
-  holdBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: COLORS.red,
-    borderRadius: 4,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 20,
-  },
-  holdBannerText: {
-    flex: 1,
-    fontFamily: 'Montserrat_600SemiBold',
-    fontSize: 13,
-    color: COLORS.white,
-  },
   holdExpiredBanner: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,

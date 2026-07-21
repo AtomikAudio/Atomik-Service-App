@@ -14,6 +14,21 @@ function serializeData(
   return out;
 }
 
+interface ExpoPushTicket {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
+/**
+ * Sends push notifications and returns the tokens that Expo reported as
+ * permanently invalid (`DeviceNotRegistered`) so the caller can prune them.
+ *
+ * Expo returns HTTP 200 even when individual messages fail — the real outcome
+ * is in each ticket's `status`/`details.error`. We log those so delivery
+ * problems (e.g. `MismatchSenderId` / missing FCM credentials) are visible.
+ */
 export async function sendExpoPushToTokens(
   tokens: Array<string | null | undefined>,
   payload: {
@@ -21,7 +36,7 @@ export async function sendExpoPushToTokens(
     body: string;
     data?: Record<string, unknown>;
   }
-): Promise<void> {
+): Promise<{ invalidTokens: string[] }> {
   const unique = [
     ...new Set(
       tokens
@@ -33,23 +48,25 @@ export async function sendExpoPushToTokens(
     ),
   ];
 
-  if (unique.length === 0) return;
+  if (unique.length === 0) return { invalidTokens: [] };
 
   const data = serializeData(payload.data);
-  const messages = unique.map((to) => ({
-    to,
-    sound: 'default' as const,
-    title: payload.title,
-    body: payload.body,
-    data,
-    channelId: 'default',
-    priority: 'high' as const,
-  }));
+  const invalidTokens: string[] = [];
 
   try {
     // Expo accepts up to 100 messages per request.
-    for (let i = 0; i < messages.length; i += 100) {
-      const chunk = messages.slice(i, i + 100);
+    for (let i = 0; i < unique.length; i += 100) {
+      const chunkTokens = unique.slice(i, i + 100);
+      const chunk = chunkTokens.map((to) => ({
+        to,
+        sound: 'default' as const,
+        title: payload.title,
+        body: payload.body,
+        data,
+        channelId: 'default',
+        priority: 'high' as const,
+      }));
+
       const res = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
@@ -59,14 +76,34 @@ export async function sendExpoPushToTokens(
         },
         body: JSON.stringify(chunk),
       });
+
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         console.warn(
-          `[push] Expo push failed (${res.status}): ${text.slice(0, 200)}`
+          `[push] Expo push failed (${res.status}): ${text.slice(0, 300)}`
         );
+        continue;
       }
+
+      const json = (await res.json().catch(() => null)) as
+        | { data?: ExpoPushTicket[] }
+        | null;
+      const tickets = json?.data ?? [];
+      tickets.forEach((ticket, idx) => {
+        if (ticket.status !== 'error') return;
+        const token = chunkTokens[idx];
+        const code = ticket.details?.error ?? 'Unknown';
+        console.warn(
+          `[push] Ticket error for ${token}: ${code} — ${ticket.message ?? ''}`
+        );
+        if (code === 'DeviceNotRegistered') {
+          invalidTokens.push(token);
+        }
+      });
     }
   } catch (err) {
     console.warn('[push] Expo push request error:', err);
   }
+
+  return { invalidTokens };
 }

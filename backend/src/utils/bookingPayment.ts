@@ -128,6 +128,19 @@ function getBaseServiceTotal(invoice: {
   return subtotal + Math.round(subtotal * taxRate);
 }
 
+/** Summarize recorded payments by type (coupon-safe; ignores cash amounts). */
+function summarizeRecordedPayments(invoice: {
+  paymentHistory?: { type?: string }[];
+}): { hasAny: boolean; hasExtraOrFull: boolean } {
+  const history = invoice.paymentHistory ?? [];
+  return {
+    hasAny: history.length > 0,
+    hasExtraOrFull: history.some(
+      (entry) => entry.type === 'extra_parts' || entry.type === 'full'
+    ),
+  };
+}
+
 /** Ledger rows for client payment history (stored entries + legacy invoices). */
 export function buildPaymentHistoryForClient(invoice: {
   paymentHistory?: InvoicePaymentEntry[];
@@ -322,10 +335,18 @@ export async function syncInvoiceSparePartsFromBooking(
   const taxRate = invoice.taxRate ?? 0.18;
   const taxAmount = Math.round(subtotal * taxRate);
   const newTotal = subtotal + taxAmount;
-  const previousTotal = invoice.totalAmount ?? 0;
 
+  const baseServiceTotal = getBaseServiceTotal(invoice);
+  const { hasExtraOrFull } = summarizeRecordedPayments(invoice);
+
+  // Once paidAt/status is set the client has settled at least the base service.
+  // If an extra-parts / full payment was recorded, the whole invoice is settled;
+  // otherwise only the base service is settled (coupon-safe: base counts as fully
+  // satisfied). Never carry the extra-parts-inclusive previous total forward —
+  // doing so ratchets amountPaid up on every sync and eventually marks the
+  // invoice fully paid without the client ever paying for the extra parts.
   if (invoice.status === 'paid' || invoice.paidAt) {
-    invoice.amountPaid = Math.max(invoice.amountPaid ?? 0, previousTotal);
+    invoice.amountPaid = hasExtraOrFull ? newTotal : baseServiceTotal;
   }
 
   invoice.spareParts = sparePartsTotal;
@@ -335,6 +356,45 @@ export async function syncInvoiceSparePartsFromBooking(
   if (getInvoiceBalanceDue(invoice) > 0) {
     invoice.status = 'pending';
     invoice.razorpayOrderId = undefined;
+  }
+
+  await invoice.save();
+}
+
+/** Remove technician-quoted spare parts from a booking's invoice (revert to base only). */
+export async function resetInvoiceSparePartsForBooking(
+  bookingId: mongoose.Types.ObjectId | string
+): Promise<void> {
+  const booking = await Booking.findById(bookingId).select('invoiceId');
+  if (!booking?.invoiceId) return;
+
+  const invoice = await Invoice.findById(booking.invoiceId);
+  if (!invoice) return;
+  if ((invoice.spareParts ?? 0) === 0) return; // nothing to clear
+
+  const subtotal =
+    (invoice.serviceCharges ?? 0) + (invoice.technicianCharges ?? 0);
+  const taxRate = invoice.taxRate ?? 0.18;
+  const taxAmount = Math.round(subtotal * taxRate);
+  const baseTotal = subtotal + taxAmount;
+
+  const baseServiceTotal = getBaseServiceTotal(invoice);
+  const { hasExtraOrFull } = summarizeRecordedPayments(invoice);
+
+  invoice.spareParts = 0;
+  invoice.taxAmount = taxAmount;
+  invoice.totalAmount = baseTotal;
+
+  // Re-anchor the settled amount now that extra parts are gone.
+  if (invoice.status === 'paid' || invoice.paidAt) {
+    invoice.amountPaid = hasExtraOrFull ? baseTotal : baseServiceTotal;
+  }
+
+  if (getInvoiceBalanceDue(invoice) > 0) {
+    invoice.status = 'pending';
+    invoice.razorpayOrderId = undefined;
+  } else if (invoice.paidAt) {
+    invoice.status = 'paid';
   }
 
   await invoice.save();
@@ -359,12 +419,22 @@ export async function ensureInvoiceReflectsBookingSpareParts(
   const invoiceSpare = invoice.spareParts ?? 0;
   const balance = getInvoiceBalanceDue(invoice);
   const amountPaid = invoice.amountPaid ?? 0;
+  const baseServiceTotal = getBaseServiceTotal(invoice);
+  const { hasAny, hasExtraOrFull } = summarizeRecordedPayments(invoice);
+  // Heal invoices whose amountPaid was previously ratcheted above the base
+  // service total by the older sync bug, which made extra-parts invoices
+  // incorrectly appear fully paid after a plain refetch. Only when a real base
+  // (and no extra/full) payment was recorded, so genuine full payments and
+  // coupon base payments are never reduced.
+  const overstatedPaid =
+    hasAny && !hasExtraOrFull && amountPaid > baseServiceTotal;
   const shouldSync =
     quoted > invoiceSpare ||
     (quoted > 0 &&
       invoiceSpare === 0 &&
       amountPaid > 0 &&
-      balance <= 0);
+      balance <= 0) ||
+    overstatedPaid;
 
   if (!shouldSync) return false;
 

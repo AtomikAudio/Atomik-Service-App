@@ -115,7 +115,13 @@ async function persistSession(data: LoginResponse): Promise<void> {
   await setToken(data.token);
   await setCachedUser(data.user);
   if (data.user.role !== 'client') {
+    // Staff never see the client onboarding intro.
     await setOnboardedFlag(true);
+  } else {
+    // Clients see the onboarding intro every time they log in or sign up.
+    // Reset the flag on each explicit auth so it reappears; OnboardingScreen
+    // sets it back to true when finished, so app relaunches don't replay it.
+    await setOnboardedFlag(false);
   }
 }
 

@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { Header } from '../../components/common/Header';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -37,7 +38,6 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showBill, setShowBill] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(
     async (silent = false) => {
@@ -58,12 +58,10 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   useFocusEffect(
     useCallback(() => {
       load(false);
-      pollRef.current = setInterval(() => load(true), POLL_MS);
-      return () => {
-        if (pollRef.current) clearInterval(pollRef.current);
-      };
     }, [load])
   );
+
+  useLiveRefresh(() => load(true), { intervalMs: POLL_MS });
 
   if (loading && !booking) return <LoadingView />;
   if (error && !booking) return <ErrorView message={error} onRetry={() => load(false)} />;

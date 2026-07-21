@@ -15,3 +15,17 @@ export async function ensureGalleryAccessAsync(): Promise<boolean> {
 
   return true;
 }
+
+/** Camera permission is required on both iOS and Android to take a photo. */
+export async function ensureCameraAccessAsync(): Promise<boolean> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    Alert.alert(
+      'Permission needed',
+      'Allow camera access to take a profile photo.'
+    );
+    return false;
+  }
+
+  return true;
+}

@@ -21,11 +21,11 @@ import {
 } from '../utils/bookingPayment';
 import { applyCouponToAmount, resolveCoupon } from '../utils/coupons';
 import { RazorpayWebhookRequest } from '../middleware/razorpayWebhook';
-// ₹1 dev test payment — disabled; re-enable with route in routes/payments.ts
-// import {
-//   ensureDevTestInvoice,
-//   isDevTestPaymentAllowed,
-// } from '../services/devTestPayment';
+// ₹1 dev test payment — TEMPORARY (remove after QA).
+import {
+  ensureDevTestInvoice,
+  isDevTestPaymentAllowed,
+} from '../services/devTestPayment';
 
 export const createPaymentOrder = async (
   req: AuthRequest,
@@ -223,8 +223,7 @@ export const createPaymentOrder = async (
   }
 };
 
-// ₹1 dev test payment — disabled. Re-enable with routes/payments.ts + DevTestPaymentCard on Home.
-/*
+// ₹1 dev test payment — TEMPORARY (remove after QA).
 export const createDevTestPaymentOrder = async (
   req: AuthRequest,
   res: Response,
@@ -275,7 +274,6 @@ export const createDevTestPaymentOrder = async (
     next(err);
   }
 };
-*/
 
 export const verifyPayment = async (
   req: AuthRequest,

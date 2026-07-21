@@ -10,36 +10,40 @@ import {
   Easing,
 } from 'react-native';
 import { PressableScale } from '../../components/common/PressableScale';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/common/Button';
 import { COLORS } from '../../constants/colors';
 import { useDispatch } from 'react-redux';
 import { setOnboarded } from '../../store/authSlice';
 import { setOnboardedFlag } from '../../services/tokenStore';
-
 const { width, height } = Dimensions.get('window');
 
-const slides = [
+const slides: {
+  id: string;
+  ionicon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  desc: string;
+  accent: string;
+}[] = [
   {
     id: '1',
-    icon: 'radio-outline',
-    title: 'Elite Audio\nService Network',
-    desc: 'Connect with certified audio engineers for precision maintenance of your sound infrastructure.',
-    accent: '#8e302f',
-  },
-  {
-    id: '2',
-    icon: 'calendar-outline',
+    ionicon: 'calendar-outline',
     title: 'Schedule\nWith Precision',
     desc: 'Book general service, inspections, or emergency visits at your venue with real-time technician assignment.',
     accent: '#8e302f',
   },
   {
-    id: '3',
-    icon: 'analytics-outline',
+    id: '2',
+    ionicon: 'analytics-outline',
     title: 'Track Every\nService Detail',
     desc: 'Live status updates, technician tracking, invoice management — complete visibility from booking to completion.',
+    accent: '#8e302f',
+  },
+  {
+    id: '3',
+    ionicon: 'time-outline',
+    title: 'Time Is Our\nCornerstone',
+    desc: 'Track every service in real time — live status, technician tracking and clear invoicing, from booking to completion.',
     accent: '#8e302f',
   },
 ];
@@ -157,7 +161,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
           ]}
         />
         <Animated.View style={[styles.iconInner, { transform: [{ scale: iconScale }] }]}>
-          <Ionicons name={item.icon as any} size={56} color={COLORS.white} />
+          <Ionicons name={item.ionicon} size={50} color={COLORS.white} />
         </Animated.View>
       </View>
 

@@ -17,8 +17,13 @@ import { RoleGuard } from '../components/auth/RoleGuard';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { rootStackOptions } from './screenOptions';
 import { PushNotificationsBootstrap } from '../components/auth/PushNotificationsBootstrap';
-import { addNotificationResponseListener } from '../services/pushNotifications';
+import {
+  addNotificationReceivedListener,
+  addNotificationResponseListener,
+} from '../services/pushNotifications';
+import { emitBookingChanged } from '../services/liveUpdates';
 import { navigateToBookingFromNotification } from './navigateFromNotification';
+import { ClientLiveEvents } from '../components/client/ClientLiveEvents';
 
 const Stack = createNativeStackNavigator();
 
@@ -50,6 +55,20 @@ export const AppNavigator: React.FC = () => {
     return () => sub.remove();
   }, [user?.role]);
 
+  // Foreground pushes (e.g. technician assigned/dropped, status changes) refresh
+  // any focused screen live, without the user switching tabs.
+  useEffect(() => {
+    const sub = addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as {
+        bookingId?: string;
+      };
+      emitBookingChanged(
+        data?.bookingId ? String(data.bookingId) : undefined
+      );
+    });
+    return () => sub.remove();
+  }, []);
+
   if (initializing) {
     return (
       <View style={styles.loading}>
@@ -61,6 +80,12 @@ export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer ref={navigationRef}>
       <PushNotificationsBootstrap />
+      <ClientLiveEvents
+        navigationRef={navigationRef}
+        enabled={
+          isAuthenticated && isOnboarded && user?.role === 'client'
+        }
+      />
       <Stack.Navigator screenOptions={rootStackOptions}>
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />

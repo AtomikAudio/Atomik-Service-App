@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { Header } from '../../components/common/Header';
 import { Screen } from '../../components/common/Screen';
 import { Card } from '../../components/common/Card';
@@ -47,18 +48,20 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
     icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
   } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const bookings = await bookingService.getMyBookings({ limit: 50 });
       setItems(
         bookings.filter((b) => !['completed', 'cancelled'].includes(b.status))
       );
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      if (!silent) setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -67,6 +70,8 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  useLiveRefresh(() => load(true));
 
   const confirmDeleteBooking = async () => {
     if (!deleteTarget) return;

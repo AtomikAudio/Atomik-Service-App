@@ -9,6 +9,11 @@ rzp-key.csv
 *-key.csv
 backend/dist/
 
+# Local-only staff/production credentials (NEVER commit)
+*.local.md
+STAFF_CREDENTIALS.local.md
+backend/STAFF_CREDENTIALS.local.md
+
 # Expo / React Native
 .expo/
 .expo-tmp-bundle/

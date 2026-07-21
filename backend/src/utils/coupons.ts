@@ -1,12 +1,21 @@
+interface CouponDef {
+  code: string;
+  label: string;
+  /** Flat percentage discount (used when fixedFinalAmount is not set). */
+  percent?: number;
+  /**
+   * Forces the final payable amount to this value (e.g. ₹1 test coupon).
+   * The effective discount percentage is computed from the actual amount.
+   */
+  fixedFinalAmount?: number;
+}
+
 /** Known promotional coupons (test / launch codes). */
-export const COUPONS: Record<
-  string,
-  { code: string; percent: number; label: string }
-> = {
+export const COUPONS: Record<string, CouponDef> = {
   SID123: {
     code: 'Sid123',
-    percent: 30,
-    label: '30% flat discount',
+    fixedFinalAmount: 1,
+    label: 'Pay only ₹1 (test)',
   },
 };
 
@@ -16,11 +25,7 @@ export function normalizeCouponCode(raw?: string | null): string {
     .toUpperCase();
 }
 
-export function resolveCoupon(raw?: string | null): {
-  code: string;
-  percent: number;
-  label: string;
-} | null {
+export function resolveCoupon(raw?: string | null): CouponDef | null {
   const key = normalizeCouponCode(raw);
   if (!key) return null;
   return COUPONS[key] ?? null;
@@ -50,16 +55,28 @@ export function applyCouponToAmount(
   if (!coupon) return null;
 
   const originalAmount = roundMoney(amount);
-  const discountAmount = roundMoney(
-    (originalAmount * coupon.percent) / 100
-  );
-  const chargeAmount = roundMoney(
-    Math.max(0, originalAmount - discountAmount)
-  );
+
+  let chargeAmount: number;
+  let discountAmount: number;
+  let discountPercent: number;
+
+  if (typeof coupon.fixedFinalAmount === 'number') {
+    // Fixed final amount (e.g. ₹1): charge that, derive the % for display.
+    chargeAmount = roundMoney(Math.min(coupon.fixedFinalAmount, originalAmount));
+    discountAmount = roundMoney(Math.max(0, originalAmount - chargeAmount));
+    discountPercent =
+      originalAmount > 0
+        ? Math.floor((discountAmount / originalAmount) * 100)
+        : 0;
+  } else {
+    discountPercent = coupon.percent ?? 0;
+    discountAmount = roundMoney((originalAmount * discountPercent) / 100);
+    chargeAmount = roundMoney(Math.max(0, originalAmount - discountAmount));
+  }
 
   return {
     originalAmount,
-    discountPercent: coupon.percent,
+    discountPercent,
     discountAmount,
     chargeAmount,
     couponCode: coupon.code,

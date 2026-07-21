@@ -3,6 +3,17 @@
  * Run `eas init` once to link this app to your Expo account (adds extra.eas.projectId).
  */
 
+const fs = require('fs');
+const path = require('path');
+
+// FCM config for Android push. Drop your Firebase google-services.json in
+// frontend/ and it will be bundled automatically (required for Expo push to
+// deliver to Android — without it notifications never reach the tray).
+const googleServicesPath = path.resolve(__dirname, 'google-services.json');
+const androidGoogleServicesFile = fs.existsSync(googleServicesPath)
+  ? './google-services.json'
+  : undefined;
+
 const PLACEHOLDER_API_HOSTS = [
   'YOUR_PRODUCTION_API_HOST',
   'YOUR_STAGING_API_HOST',
@@ -73,6 +84,9 @@ module.exports = {
     android: {
       package: 'com.atomikaudio.service',
       versionCode: 1,
+      ...(androidGoogleServicesFile
+        ? { googleServicesFile: androidGoogleServicesFile }
+        : {}),
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#231f20',

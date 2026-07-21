@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { DashboardTopBar } from '../../components/common/DashboardTopBar';
 import { Badge } from '../../components/common/Badge';
 import { Card } from '../../components/common/Card';
@@ -37,9 +38,12 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [jobs, setJobs] = useState<Booking[]>([]);
   const [technicians, setTechnicians] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [techTab, setTechTab] = useState<'available' | 'ongoing' | 'pending'>(
+    'available'
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const list = await bookingService.getMyBookings({ limit: 50 });
       setJobs(list.filter((j) => j.status !== 'cancelled'));
@@ -47,14 +51,16 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
         try {
           setTechnicians(await authService.listTechnicians());
         } catch {
-          setTechnicians([]);
+          if (!silent) setTechnicians([]);
         }
       }
     } catch {
-      setJobs([]);
-      if (isMaster) setTechnicians([]);
+      if (!silent) {
+        setJobs([]);
+        if (isMaster) setTechnicians([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [isMaster]);
 
@@ -63,6 +69,8 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  useLiveRefresh(() => load(true));
 
   const availableJobs = jobs.filter((j) => !getTechId(j));
   const openJobs = availableJobs.filter(
@@ -193,15 +201,52 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
             </Card>
           </PressableScale>
         ) : (
-          <View style={styles.statsRow}>
-            <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>{activeMine.length}</Text>
-              <Text style={styles.statLabel}>Ongoing Jobs</Text>
-            </Card>
-            <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>{completedJobs.length}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </Card>
+          <View style={styles.techTabs}>
+            {(
+              [
+                { key: 'available', label: 'Available', count: openJobs.length },
+                { key: 'ongoing', label: 'Ongoing', count: ongoingJobs.length },
+                {
+                  key: 'pending',
+                  label: 'Pending',
+                  count: awaitingReschedule.length,
+                },
+              ] as const
+            ).map((t) => {
+              const active = techTab === t.key;
+              return (
+                <PressableScale
+                  key={t.key}
+                  style={styles.techTabWrap}
+                  scaleTo={0.96}
+                  onPress={() => setTechTab(t.key)}
+                >
+                  <Card
+                    padding={14}
+                    style={[styles.techTab, active && styles.techTabActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.techTabNum,
+                        active && styles.techTabNumActive,
+                      ]}
+                    >
+                      {t.count}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.techTabLabel,
+                        active && styles.techTabLabelActive,
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                    >
+                      {t.label}
+                    </Text>
+                  </Card>
+                </PressableScale>
+              );
+            })}
           </View>
         )}
 
@@ -215,43 +260,8 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
           </>
         ) : null}
 
-        {!isMaster ? (
+        {!isMaster && techTab === 'available' ? (
           <>
-            <Text style={styles.sectionTitle}>Ongoing Jobs</Text>
-            {ongoingJobs.length === 0 ? (
-              <Text style={styles.empty}>No ongoing jobs assigned to you yet.</Text>
-            ) : (
-              ongoingJobs.map((j) => renderJob(j, 'mine'))
-            )}
-
-            {awaitingReschedule.length > 0 ? (
-              <>
-                <Text style={styles.sectionTitle}>Awaiting Reschedule</Text>
-                <Text style={styles.sectionHint}>
-                  Jobs with a proposed time change waiting to be confirmed.
-                </Text>
-                {awaitingReschedule.map((j) => (
-                  <PressableScale
-                    key={j._id}
-                    style={styles.jobCard}
-                    onPress={() =>
-                      navigation.navigate('JobDetail', { jobId: j._id })
-                    }
-                  >
-                    <View style={styles.jobContent}>
-                      {renderJobHeader(j, 'reschedule')}
-                      <Text style={styles.jobVenue}>{j.venueId?.name}</Text>
-                      <Text style={styles.rescheduleLine}>{rescheduleHint(j)}</Text>
-                      <Text style={styles.jobMeta}>
-                        #{j.bookingId} ·{' '}
-                        {formatBookingSchedule(j.scheduledDate, j.scheduledTime)}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                ))}
-              </>
-            ) : null}
-
             {openJobs.length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>Available Jobs</Text>
@@ -282,6 +292,23 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
               </>
             ) : null}
 
+            {openJobs.length === 0 &&
+            declinedJobs.length === 0 &&
+            othersJobs.length === 0 ? (
+              <Text style={styles.empty}>No available jobs right now.</Text>
+            ) : null}
+          </>
+        ) : null}
+
+        {!isMaster && techTab === 'ongoing' ? (
+          <>
+            <Text style={styles.sectionTitle}>Ongoing Jobs</Text>
+            {ongoingJobs.length === 0 ? (
+              <Text style={styles.empty}>No ongoing jobs assigned to you yet.</Text>
+            ) : (
+              ongoingJobs.map((j) => renderJob(j, 'mine'))
+            )}
+
             {completedJobs.length > 0 ? (
               <>
                 <Text style={styles.sectionTitle}>Completed</Text>
@@ -289,7 +316,41 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
               </>
             ) : null}
           </>
-        ) : (
+        ) : null}
+
+        {!isMaster && techTab === 'pending' ? (
+          <>
+            <Text style={styles.sectionTitle}>Awaiting Reschedule</Text>
+            <Text style={styles.sectionHint}>
+              Jobs with a proposed time change waiting to be confirmed.
+            </Text>
+            {awaitingReschedule.length === 0 ? (
+              <Text style={styles.empty}>Nothing pending right now.</Text>
+            ) : (
+              awaitingReschedule.map((j) => (
+                <PressableScale
+                  key={j._id}
+                  style={styles.jobCard}
+                  onPress={() =>
+                    navigation.navigate('JobDetail', { jobId: j._id })
+                  }
+                >
+                  <View style={styles.jobContent}>
+                    {renderJobHeader(j, 'reschedule')}
+                    <Text style={styles.jobVenue}>{j.venueId?.name}</Text>
+                    <Text style={styles.rescheduleLine}>{rescheduleHint(j)}</Text>
+                    <Text style={styles.jobMeta}>
+                      #{j.bookingId} ·{' '}
+                      {formatBookingSchedule(j.scheduledDate, j.scheduledTime)}
+                    </Text>
+                  </View>
+                </PressableScale>
+              ))
+            )}
+          </>
+        ) : null}
+
+        {isMaster ? (
           <>
             {myJobs.filter((j) => !['completed', 'cancelled'].includes(j.status))
               .length > 0 ? (
@@ -307,7 +368,7 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
               othersJobs.map((j) => renderJob(j, 'other'))
             )}
           </>
-        )}
+        ) : null}
       </SafeScrollView>
     </Screen>
   );
@@ -377,17 +438,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.red,
   },
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  statCard: { flex: 1 },
-  statNum: {
+  techTabs: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+  },
+  techTabWrap: {
+    flex: 1,
+  },
+  techTab: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  techTabActive: {
+    borderColor: COLORS.red,
+    backgroundColor: 'rgba(142,48,47,0.16)',
+  },
+  techTabNum: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 22,
     color: COLORS.white,
   },
-  statLabel: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
+  techTabNumActive: {
+    color: COLORS.red,
+  },
+  techTabLabel: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 12,
     color: COLORS.gray,
+    marginTop: 4,
+  },
+  techTabLabelActive: {
+    color: COLORS.white,
   },
   sectionTitle: {
     fontFamily: 'Montserrat_600SemiBold',

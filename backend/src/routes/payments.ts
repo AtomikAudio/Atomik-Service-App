@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   createPaymentOrder,
-  // createDevTestPaymentOrder, // ₹1 dev test — disabled; re-enable with route below
+  createDevTestPaymentOrder, // ₹1 dev test — TEMPORARY (remove after QA)
   verifyPayment,
   getMyInvoices,
 } from '../controllers/paymentController';
@@ -24,8 +24,8 @@ router.post(
   validate,
   createPaymentOrder
 );
-// ₹1 dev test payment — disabled. Re-enable import + controller in paymentController.ts.
-// router.post('/dev-test-order', authorize('client'), createDevTestPaymentOrder);
+// ₹1 dev test payment — TEMPORARY (remove after QA).
+router.post('/dev-test-order', authorize('client'), createDevTestPaymentOrder);
 router.post(
   '/verify',
   authorize('client'),

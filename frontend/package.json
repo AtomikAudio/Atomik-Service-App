@@ -4,6 +4,7 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File ./start-expo.ps1",
+    "start:clean": "expo start -c",
     "qr": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/show-qr.ps1",
     "android": "expo start --android",
     "ios": "expo start --ios",

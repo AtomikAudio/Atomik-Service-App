@@ -20,9 +20,7 @@ import { paymentService } from '../../services/payments';
 import { bookingService } from '../../services/bookings';
 import { SparePartLine } from '../../utils/spareParts';
 import {
-  getClientSparePartsPayAmount,
   getInvoiceBalanceDue,
-  getExtraPartsGstAmount,
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
@@ -209,21 +207,24 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const serviceLabel = formatServiceTypeLabel(serviceType);
 
+  // GST is always exactly 18% — never derived from a drifting invoice.taxRate
+  // or from (charge − subtotal), which could round to something other than 18%.
+  const GST_RATE = 0.18;
+  const gstLabel = 'GST (18%)';
+
   const isExtraParts =
     payFor === 'extra_parts' ||
     (invoice ? isExtraPartsOnlyPayment(invoice, sparePartsLines) : false);
   const balanceDue = invoice ? getInvoiceBalanceDue(invoice) : 0;
-  const baseAmountToPay = isExtraParts
-    ? getClientSparePartsPayAmount(invoice, sparePartsLines)
-    : balanceDue;
+  const sparePreTax =
+    sumSparePartsTotal(sparePartsLines) || (invoice?.spareParts ?? 0);
+  // Exactly 18% of the parts subtotal, rounded to the nearest rupee.
+  const gstOnExtra = Math.round(sparePreTax * GST_RATE);
+  const extraPartsTotal = sparePreTax + gstOnExtra;
+  const baseAmountToPay = isExtraParts ? extraPartsTotal : balanceDue;
   const amountToPay = appliedCoupon
     ? appliedCoupon.chargeAmount
     : baseAmountToPay;
-  const sparePreTax = sumSparePartsTotal(sparePartsLines) || (invoice?.spareParts ?? 0);
-  const gstOnExtra = invoice
-    ? getExtraPartsGstAmount(invoice, sparePartsLines, invoice.taxRate)
-    : 0;
-  const gstLabel = `GST (${Math.round((invoice?.taxRate ?? 0.18) * 100)}%)`;
 
   const applyCoupon = () => {
     const result = applyLocalCoupon(baseAmountToPay, couponInput);
@@ -271,14 +272,19 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       );
 
       const orderPaise = Number(orderData.order?.amount);
+      // The backend is authoritative for the charge — it validates and applies
+      // the coupon, and the checkout is opened with orderData.order.amount. Only
+      // block if the gateway would charge MORE than we showed the user (genuine
+      // overcharge, e.g. the balance grew). Charging the same or less must never
+      // spuriously fail a valid coupon due to minor rounding / balance drift.
       if (
         Number.isFinite(orderPaise) &&
         Number.isFinite(expectedPaise) &&
-        Math.abs(orderPaise - expectedPaise) > 1
+        orderPaise > expectedPaise + 1
       ) {
         Alert.alert(
-          'Amount mismatch',
-          `Checkout amount (₹${(orderPaise / 100).toFixed(2)}) does not match the discounted total (₹${amountToPay.toFixed(2)}). Please remove and re-apply the coupon, then try again.`
+          'Amount updated',
+          `The amount due is now ₹${(orderPaise / 100).toFixed(2)} (was ₹${amountToPay.toFixed(2)}). Please review the total and try the payment again.`
         );
         return;
       }
@@ -298,20 +304,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           razorpay_payment_id: orderData.demoPayment.paymentId,
           razorpay_signature: orderData.demoPayment.signature,
         });
-        resetDraft();
-        Alert.alert(
-          'Payment Successful',
-          isExtraParts
-            ? 'Extra parts payment received. Thank you!'
-            : 'Demo payment completed. Your booking is confirmed.',
-          [
-            {
-              text: 'Track Service',
-              onPress: () =>
-                navigation.navigate('TrackService', { id: bookingId }),
-            },
-          ]
-        );
+        showPaymentSuccess();
         return;
       }
 
@@ -336,13 +329,38 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       );
       setWebviewVisible(true);
     } catch (e: any) {
-      Alert.alert(
-        e?.status === 429 ? 'Too many requests' : 'Payment Failed',
-        formatRateLimitMessage(e, 'Could not start payment. Please try again later.')
+      showPaymentFailed(
+        formatRateLimitMessage(
+          e,
+          'Could not start payment. Please try again later.'
+        )
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const showPaymentSuccess = () => {
+    resetDraft();
+    setResultAlert({
+      title: 'Payment successful',
+      message: isExtraParts
+        ? 'Extra parts payment received. Thank you!'
+        : 'Your payment is complete and your booking is confirmed.',
+      icon: 'checkmark-circle-outline',
+      onClose: () =>
+        bookingId
+          ? navigation.navigate('TrackService', { id: bookingId })
+          : navigation.goBack(),
+    });
+  };
+
+  const showPaymentFailed = (message?: string) => {
+    setResultAlert({
+      title: 'Payment unsuccessful',
+      message: message || 'Payment was not completed. Please try again.',
+      icon: 'alert-circle-outline',
+    });
   };
 
   const onWebViewMessage = async (event: { nativeEvent: { data: string } }) => {
@@ -350,7 +368,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'dismiss' || data.type === 'failed') {
         setWebviewVisible(false);
-        if (data.type === 'failed') Alert.alert('Payment Failed', 'Please try again');
+        showPaymentFailed();
         return;
       }
       if (data.type === 'success' && invoiceId) {
@@ -362,25 +380,14 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           razorpay_payment_id: data.razorpay_payment_id,
           razorpay_signature: data.razorpay_signature,
         });
-        resetDraft();
-        Alert.alert(
-          'Payment Successful',
-          isExtraParts
-            ? 'Extra parts payment received. Thank you!'
-            : 'Your booking is confirmed.',
-          [
-            {
-              text: 'Track Service',
-              onPress: () =>
-                navigation.navigate('TrackService', { id: bookingId }),
-            },
-          ]
-        );
+        showPaymentSuccess();
       }
     } catch (e: any) {
-      Alert.alert(
-        e?.status === 429 ? 'Too many requests' : 'Verification failed',
-        formatRateLimitMessage(e, e?.message || 'Verification failed')
+      setWebviewVisible(false);
+      showPaymentFailed(
+        e?.status === 429
+          ? formatRateLimitMessage(e, 'Too many attempts. Please try again later.')
+          : 'We could not verify your payment. If money was deducted, it will be reflected shortly.'
       );
     } finally {
       setLoading(false);
@@ -489,8 +496,34 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
             </Text>
             {isExtraParts ? (
               <>
+                {sparePartsLines.length > 0 ? (
+                  <View style={styles.partsBreakdown}>
+                    <Text style={styles.partsBreakdownTitle}>
+                      Parts added by technician
+                    </Text>
+                    {sparePartsLines.map((p, i) => {
+                      const qty = p.quantity ?? 1;
+                      const lineCost = qty * (p.unitCost ?? 0);
+                      return (
+                        <View key={`${p.name}-${i}`} style={styles.partItemRow}>
+                          <Text style={styles.partItemName} numberOfLines={2}>
+                            {p.name}
+                            {qty > 1 ? ` × ${qty}` : ''}
+                          </Text>
+                          <Text style={styles.partItemCost}>
+                            {formatINR(lineCost)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
                 <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Extra parts (quoted)</Text>
+                  <Text style={styles.billLabel}>
+                    {sparePartsLines.length > 0
+                      ? 'Parts subtotal'
+                      : 'Extra parts (quoted)'}
+                  </Text>
                   <Text style={styles.billValue}>{formatINR(sparePreTax)}</Text>
                 </View>
                 <View style={styles.billRow}>
@@ -826,6 +859,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  partsBreakdown: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  partsBreakdownTitle: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 11,
+    color: COLORS.red,
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  partItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 8,
+  },
+  partItemName: {
+    flex: 1,
+    flexShrink: 1,
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    lineHeight: 17,
+  },
+  partItemCost: {
+    flexShrink: 0,
+    fontFamily: 'SpaceMono_400Regular',
+    fontSize: 12,
+    color: COLORS.white,
+    textAlign: 'right',
   },
   billLabel: {
     fontFamily: 'Montserrat_400Regular',

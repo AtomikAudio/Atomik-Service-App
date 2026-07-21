@@ -35,7 +35,7 @@ export const notifyUsers = async (
     fcmToken: { $exists: true, $nin: [null, ''] },
   }).select('fcmToken');
 
-  await sendExpoPushToTokens(
+  const { invalidTokens } = await sendExpoPushToTokens(
     users.map((u) => u.fcmToken),
     {
       title: payload.title,
@@ -43,6 +43,14 @@ export const notifyUsers = async (
       data: payload.data,
     }
   );
+
+  // Drop tokens Expo says are dead so they don't linger and mask real delivery.
+  if (invalidTokens.length > 0) {
+    await User.updateMany(
+      { fcmToken: { $in: invalidTokens } },
+      { $unset: { fcmToken: '' } }
+    );
+  }
 };
 
 export const notifyByRoles = async (

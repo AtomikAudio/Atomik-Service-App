@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSelector } from 'react-redux';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '../../components/common/Header';
 import { Badge } from '../../components/common/Badge';
@@ -15,6 +16,10 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Card } from '../../components/common/Card';
 import { LoadingView } from '../../components/common/LoadingView';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../../components/common/ThemedConfirmModal';
 import { bookingService, Booking } from '../../services/bookings';
 import { authService, AuthUser } from '../../services/auth';
 import { MasterJobAssignPanel } from '../../components/technician/MasterJobAssignPanel';
@@ -96,6 +101,7 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [notes, setNotes] = useState('');
   const [partName, setPartName] = useState('');
   const [partCost, setPartCost] = useState('');
+  const [editingPartIndex, setEditingPartIndex] = useState<number | null>(null);
   const [spareParts, setSpareParts] = useState<
     { name: string; quantity: number; unitCost: number }[]
   >([]);
@@ -106,6 +112,12 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [rescheduleDate, setRescheduleDate] = useState<string | null>(null);
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [rescheduleNote, setRescheduleNote] = useState('');
+  const [dropConfirmOpen, setDropConfirmOpen] = useState(false);
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: keyof typeof Ionicons.glyphMap;
+  } | null>(null);
 
   const isMaster = user?.role === 'master_technician';
 
@@ -146,9 +158,17 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       const updated = await bookingService.acceptJob(jobId);
       setBooking(updated);
       setActiveTab('details');
-      Alert.alert('Accepted', 'Job assigned to you.');
+      setResultAlert({
+        title: 'Job assigned',
+        message: 'This job is now assigned to you.',
+        icon: 'checkmark-circle-outline',
+      });
     } catch (e: any) {
-      Alert.alert('Unable to accept', e.message);
+      setResultAlert({
+        title: 'Unable to accept',
+        message: e.message || 'Could not accept this job. Please try again.',
+        icon: 'alert-circle-outline',
+      });
       load();
     } finally {
       setActing(false);
@@ -177,31 +197,30 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     ]);
   };
 
-  const dropJob = () => {
-    Alert.alert(
-      'Drop this job?',
-      'The job returns to the open pool for other technicians.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Drop job',
-          style: 'destructive',
-          onPress: async () => {
-            setActing(true);
-            try {
-              const updated = await bookingService.dropJob(jobId);
-              setBooking(updated);
-              setActiveTab('details');
-              Alert.alert('Dropped', 'Job is open for other technicians.');
-            } catch (e: any) {
-              Alert.alert('Failed', e.message);
-            } finally {
-              setActing(false);
-            }
-          },
-        },
-      ]
-    );
+  const dropJob = () => setDropConfirmOpen(true);
+
+  const confirmDropJob = async () => {
+    setActing(true);
+    try {
+      const updated = await bookingService.dropJob(jobId);
+      setBooking(updated);
+      setActiveTab('details');
+      setDropConfirmOpen(false);
+      setResultAlert({
+        title: 'Job dropped',
+        message: 'This job is back in the open pool for other technicians.',
+        icon: 'checkmark-circle-outline',
+      });
+    } catch (e: any) {
+      setDropConfirmOpen(false);
+      setResultAlert({
+        title: 'Could not drop job',
+        message: e.message || 'Something went wrong. Please try again.',
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setActing(false);
+    }
   };
 
   const updateStatus = async () => {
@@ -209,7 +228,9 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       await bookingService.updateStatus(jobId, currentStatus, notes, {
         technicianNotes: notes || undefined,
-        ...(spareParts.length > 0 ? { spareParts } : {}),
+        // Always send the current list (even when empty) so edits and deletions
+        // of previously-added extra parts persist and the invoice is updated.
+        spareParts,
       });
       Alert.alert('Saved', `Status updated to ${currentStatus.replace(/_/g, ' ')}.`);
       load();
@@ -635,27 +656,73 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           placeholder="500"
         />
         <Button
-          label="ADD PART"
+          label={editingPartIndex === null ? 'ADD PART' : 'UPDATE PART'}
           variant="outline"
           onPress={() => {
             if (!partName.trim() || !partCost.trim()) return;
-            setSpareParts([
-              ...spareParts,
-              {
-                name: partName.trim(),
-                quantity: 1,
-                unitCost: Number(partCost) || 0,
-              },
-            ]);
+            const nextPart = {
+              name: partName.trim(),
+              quantity:
+                editingPartIndex !== null
+                  ? spareParts[editingPartIndex]?.quantity ?? 1
+                  : 1,
+              unitCost: Number(partCost) || 0,
+            };
+            setSpareParts((prev) => {
+              if (editingPartIndex === null) return [...prev, nextPart];
+              return prev.map((p, idx) =>
+                idx === editingPartIndex ? nextPart : p
+              );
+            });
+            setEditingPartIndex(null);
             setPartName('');
             setPartCost('');
           }}
           style={styles.addPartBtn}
         />
+        {editingPartIndex !== null ? (
+          <Button
+            label="CANCEL EDIT"
+            variant="ghost"
+            onPress={() => {
+              setEditingPartIndex(null);
+              setPartName('');
+              setPartCost('');
+            }}
+            style={styles.addPartBtn}
+          />
+        ) : null}
         {spareParts.map((p, i) => (
           <View key={`${p.name}-${i}`} style={styles.partRow}>
             <Text style={styles.partName}>{p.name}</Text>
             <Text style={styles.partCost}>₹{p.unitCost}</Text>
+            <View style={styles.partActions}>
+              <TouchableOpacity
+                onPress={() => {
+                  setEditingPartIndex(i);
+                  setPartName(p.name);
+                  setPartCost(String(p.unitCost ?? ''));
+                }}
+                hitSlop={8}
+                style={styles.partActionBtn}
+              >
+                <Ionicons name="create-outline" size={18} color={COLORS.gray} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setSpareParts((prev) => prev.filter((_, idx) => idx !== i));
+                  if (editingPartIndex === i) {
+                    setEditingPartIndex(null);
+                    setPartName('');
+                    setPartCost('');
+                  }
+                }}
+                hitSlop={8}
+                style={styles.partActionBtn}
+              >
+                <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+              </TouchableOpacity>
+            </View>
           </View>
         ))}
       </Card>
@@ -798,6 +865,29 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {isAssignedToOther && renderDetailsTab()}
       </ScrollView>
+
+      <ThemedConfirmModal
+        visible={dropConfirmOpen}
+        title="Drop this job?"
+        message="The job returns to the open pool for other technicians to accept."
+        confirmLabel="DROP JOB"
+        cancelLabel="KEEP"
+        confirmDestructive
+        loading={acting}
+        icon="alert-circle-outline"
+        onConfirm={confirmDropJob}
+        onCancel={() => {
+          if (!acting) setDropConfirmOpen(false);
+        }}
+      />
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        onClose={() => setResultAlert(null)}
+      />
     </View>
   );
 };
@@ -1007,6 +1097,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
@@ -1017,11 +1108,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.white,
     flex: 1,
+    flexShrink: 1,
+  },
+  partActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  partActionBtn: {
+    padding: 6,
   },
   partCost: {
     fontFamily: 'SpaceMono_400Regular',
     fontSize: 12,
     color: COLORS.gray,
+    flexShrink: 0,
+    textAlign: 'right',
   },
   partTotalRow: {
     borderTopWidth: 1,

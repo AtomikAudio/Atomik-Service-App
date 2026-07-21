@@ -24,6 +24,7 @@ import {
   serializeBookingsForRole,
   syncInvoiceSparePartsFromBooking,
   ensureInvoiceReflectsBookingSpareParts,
+  resetInvoiceSparePartsForBooking,
   getInvoiceBalanceDue,
   sumSparePartsLineItems,
   hasBaseServicePayment,
@@ -350,8 +351,11 @@ export const updateBookingStatus = async (
 
     const updatedBy = new mongoose.Types.ObjectId(req.user!.id);
     const sparePartsLines = Array.isArray(spareParts) ? spareParts : undefined;
-    const hasSparePartsUpdate =
-      sparePartsLines !== undefined && sparePartsLines.length > 0;
+    // A provided array (even empty) is an explicit edit — empty clears the parts.
+    const sparePartsProvided = sparePartsLines !== undefined;
+    const previousPartsTotal = sumSparePartsLineItems(
+      booking.spareParts as { name?: string; quantity?: number; unitCost?: number }[] | undefined
+    );
 
     const updates: Record<string, unknown> = {
       status,
@@ -366,7 +370,7 @@ export const updateBookingStatus = async (
     };
 
     if (technicianNotes !== undefined) updates.technicianNotes = technicianNotes;
-    if (hasSparePartsUpdate) updates.spareParts = sparePartsLines;
+    if (sparePartsProvided) updates.spareParts = sparePartsLines;
 
     if (status === 'completed') updates.completedAt = new Date();
     if (status === 'cancelled') {
@@ -382,10 +386,17 @@ export const updateBookingStatus = async (
       .populate('venueId', 'name area city')
       .populate('invoiceId');
 
-    if (updated && hasSparePartsUpdate) {
-      await syncInvoiceSparePartsFromBooking(bookingId, sparePartsLines!);
+    if (updated && sparePartsProvided) {
       const partsTotal = sumSparePartsLineItems(sparePartsLines);
       if (partsTotal > 0) {
+        await syncInvoiceSparePartsFromBooking(bookingId, sparePartsLines!);
+      } else {
+        // Parts cleared — revert the invoice to base charges only.
+        await resetInvoiceSparePartsForBooking(bookingId);
+      }
+      // Notify the client only when the extra-parts charge actually increased
+      // (new parts quoted) — not on edits, removals, or repeated status saves.
+      if (partsTotal > previousPartsTotal) {
         const inv = await Invoice.findById(updated.invoiceId);
         const balanceDue = inv ? getInvoiceBalanceDue(inv) : 0;
         if (balanceDue > 0) {
@@ -941,7 +952,7 @@ export const proposeReschedule = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+): Promise<void> => { 
   try {
     const bookingId = toObjectId(req.params.id);
     await proposeRescheduleForBooking(bookingId.toString(), req.user!.id, req.user!.role, {

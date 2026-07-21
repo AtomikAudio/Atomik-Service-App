@@ -6,6 +6,7 @@ import { setUnauthorizedHandler } from '../../services/api';
 import { getToken, purgeDemoSessionToken } from '../../services/tokenStore';
 import { authService } from '../../services/auth';
 import { warmupApi } from '../../services/apiWarmup';
+import { runAppVersionCacheGuard } from '../../utils/appCache';
 import { COLORS } from '../../constants/colors';
 
 interface Props {
@@ -27,6 +28,10 @@ export const AuthBootstrap: React.FC<Props> = ({ children }) => {
       warmupApi().catch(() => {});
 
       try {
+        // Clear stale caches first if the app was updated, so the fresh build
+        // never renders data left over from the previous version.
+        await runAppVersionCacheGuard();
+
         await purgeDemoSessionToken();
 
         // Fast path: restore the locally cached session instantly so returning

@@ -9,6 +9,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useResponsive } from '../../hooks/useResponsive';
 import { DashboardTopBar } from '../../components/common/DashboardTopBar';
 import { Card } from '../../components/common/Card';
 import { FadeIn } from '../../components/common/FadeIn';
@@ -36,8 +38,6 @@ import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
 import { SafeScrollView } from '../../components/common/SafeScrollView';
 import { RescheduleProposalCard } from '../../components/client/RescheduleProposalCard';
-// ₹1 dev test payment — disabled; re-enable import + block below when needed.
-// import { DevTestPaymentCard } from '../../components/client/DevTestPaymentCard';
 
 interface Props {
   navigation: any;
@@ -47,14 +47,27 @@ const QuickActionItem = ({
   icon,
   label,
   onPress,
+  width,
+  tileSize,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
+  width: number;
+  tileSize: number;
 }) => (
-  <PressableScale onPress={onPress} style={styles.quickAction} scaleTo={0.92}>
-    <View style={styles.quickActionIcon}>
-      <Ionicons name={icon} size={20} color={COLORS.white} />
+  <PressableScale
+    onPress={onPress}
+    style={[styles.quickAction, { width }]}
+    scaleTo={0.92}
+  >
+    <View
+      style={[
+        styles.quickActionIcon,
+        { width: tileSize, height: tileSize, borderRadius: tileSize * 0.26 },
+      ]}
+    >
+      <Ionicons name={icon} size={Math.round(tileSize * 0.36)} color={COLORS.white} />
     </View>
     <Text style={styles.quickActionLabel} numberOfLines={2}>
       {label}
@@ -63,6 +76,28 @@ const QuickActionItem = ({
 );
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
+  const { width, isTablet } = useResponsive();
+  // Fully dynamic Quick Actions grid: derive the column count and tile size from
+  // the actual space available, so it fits any screen (Fold cover, phones,
+  // tablets) without hardcoded breakpoints or clipping.
+  const quickGridWidth = width - 40; // scroll paddingHorizontal (20) * 2
+  const quickColumnGap = 12;
+  const quickMinCol = 76; // smallest comfortable width per action before wrapping
+  const quickMaxColumns = isTablet ? 5 : 4;
+  const quickColumns = Math.max(
+    2,
+    Math.min(
+      quickMaxColumns,
+      Math.floor((quickGridWidth + quickColumnGap) / (quickMinCol + quickColumnGap))
+    )
+  );
+  const quickItemWidth = Math.floor(
+    (quickGridWidth - quickColumnGap * (quickColumns - 1)) / quickColumns
+  );
+  const quickTileSize = Math.max(46, Math.min(64, quickItemWidth - 22));
+  // Horizontal cards should never exceed the screen; leave a peek of the next.
+  const serviceCardWidth = Math.min(268, Math.round(width * 0.82));
+
   const user = useSelector((state: any) => state.auth.user);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -75,7 +110,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     icon?: 'checkmark-circle-outline' | 'alert-circle-outline';
   } | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const [b, invoices] = await Promise.all([
         bookingService.getMyBookings({ limit: 20 }),
@@ -86,9 +121,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         invoices.filter((i) => getInvoiceBalanceDue(i) > 0).length
       );
     } catch {
-      setBookings([]);
+      if (!silent) setBookings([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -125,6 +160,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  useLiveRefresh(() => load(true));
 
   const upcomingServices = bookings.filter(
     (b) => !['completed', 'cancelled'].includes(b.status)
@@ -234,7 +271,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                   <PressableScale
                     key={item._id}
                     onPress={openTracking}
-                    style={styles.serviceCardPressable}
+                    style={[styles.serviceCardPressable, { width: serviceCardWidth }]}
                   >
                     <Card style={styles.serviceCardHorizontal} padding={16}>
                       <Text style={styles.serviceType} numberOfLines={1}>
@@ -318,10 +355,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
         <FadeIn index={5} style={styles.quickActionsSection}>
           <Text style={styles.sectionTitleInline}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
+          <View style={[styles.quickActionsGrid, { columnGap: quickColumnGap }]}>
             <QuickActionItem
               icon="calendar-outline"
               label="Book Service"
+              width={quickItemWidth}
+              tileSize={quickTileSize}
               onPress={() =>
                 navigation.navigate('ServiceCategories', { reset: true })
               }
@@ -329,6 +368,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <QuickActionItem
               icon="hardware-chip-outline"
               label="General Service"
+              width={quickItemWidth}
+              tileSize={quickTileSize}
               onPress={() =>
                 navigation.navigate('ServiceCategories', {
                   reset: true,
@@ -339,6 +380,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <QuickActionItem
               icon="navigate-outline"
               label="General Visit"
+              width={quickItemWidth}
+              tileSize={quickTileSize}
               onPress={() =>
                 navigation.navigate('ServiceCategories', {
                   reset: true,
@@ -349,6 +392,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <QuickActionItem
               icon="card-outline"
               label="Payment History"
+              width={quickItemWidth}
+              tileSize={quickTileSize}
               onPress={() => navigation.getParent()?.navigate('Payments')}
             />
           </View>
@@ -482,6 +527,7 @@ const styles = StyleSheet.create({
   horizontalList: { paddingBottom: 8, gap: 14, paddingRight: 8 },
   serviceCardPressable: {
     width: 268,
+    maxWidth: '100%',
   },
   serviceCardHorizontal: {
     width: '100%',
@@ -527,19 +573,15 @@ const styles = StyleSheet.create({
   },
   quickActionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    rowGap: 18,
   },
   quickAction: {
-    flex: 1,
-    minWidth: 0,
     alignItems: 'center',
     paddingHorizontal: 2,
   },
   quickActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',

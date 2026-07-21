@@ -139,17 +139,17 @@ export const paymentService = {
     }>;
   },
 
-  // ₹1 dev test payment — disabled. Re-enable with DevTestPaymentCard + backend route.
-  // async createDevTestOrder() {
-  //   return api.post('/payments/dev-test-order') as Promise<{
-  //     devTest: true;
-  //     invoiceId: string;
-  //     bookingId: string;
-  //     order: { id: string; amount: number; currency: string };
-  //     invoice: { invoiceNumber: string; totalAmount: number; balanceDue: number };
-  //     key: string;
-  //   }>;
-  // },
+  // ₹1 dev test payment — TEMPORARY (remove after QA).
+  async createDevTestOrder() {
+    return api.post('/payments/dev-test-order') as Promise<{
+      devTest: true;
+      invoiceId: string;
+      bookingId: string;
+      order: { id: string; amount: number; currency: string };
+      invoice: { invoiceNumber: string; totalAmount: number; balanceDue: number };
+      key: string;
+    }>;
+  },
 
   async verifyPayment(payload: {
     invoiceId: string;

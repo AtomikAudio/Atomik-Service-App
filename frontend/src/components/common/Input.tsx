@@ -204,13 +204,18 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: 'Montserrat_400Regular',
     fontSize: 14,
-    lineHeight: 22,
     paddingHorizontal: 16,
+    // Android draws extra font padding that offsets text vertically; disabling
+    // it keeps single-line text centred consistently with iOS.
+    includeFontPadding: false,
   },
   singleLineInput: {
     flex: 1,
     height: 50,
     paddingVertical: 0,
+    // NOTE: never set `lineHeight` on a single-line iOS TextInput — it breaks
+    // iOS's built-in vertical centring and drops the text to the bottom.
+    textAlignVertical: 'center',
   },
   inputWithLeftIcon: {
     paddingLeft: 8,
@@ -219,6 +224,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 110,
     paddingVertical: 14,
+    lineHeight: 20,
     textAlignVertical: 'top',
   },
   leftIcon: {

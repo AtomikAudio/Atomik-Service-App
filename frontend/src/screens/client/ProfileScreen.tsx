@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +22,8 @@ import { venueService } from '../../services/venues';
 import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
 import { navigateProfileScreen } from '../../navigation/profileNavigation';
 import type { ProfileScreenName } from '../../navigation/profileScreens';
+import { getReadableAppVersion } from '../../utils/appCache';
+import { ThemedConfirmModal } from '../../components/common/ThemedConfirmModal';
 
 const MenuItem = ({
   icon,
@@ -53,6 +54,8 @@ interface Props {
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const dispatch = useDispatch();
   const user = useSelector((state: any) => state.auth.user);
+  const [logoutOpen, setLogoutOpen] = React.useState(false);
+  const [loggingOut, setLoggingOut] = React.useState(false);
   const [stats, setStats] = React.useState({
     services: 0,
     venues: 0,
@@ -138,24 +141,18 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('Jobs', { screen: 'TechDashboard' });
   };
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            try {
-              await authService.logout();
-            } catch {
-              /* still clear local session */
-            }
-            dispatch(logout());
-          })();
-        },
-      },
-    ]);
+  const handleLogout = () => setLogoutOpen(true);
+
+  const confirmLogout = () => {
+    setLoggingOut(true);
+    void (async () => {
+      try {
+        await authService.logout();
+      } catch {
+        /* still clear local session */
+      }
+      dispatch(logout());
+    })();
   };
 
   return (
@@ -308,9 +305,25 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </Card>
 
         <Text style={styles.version}>
-          ATOMIK v1.0.0 • Audio Engineering and Design · Service Infrastructure
+          ATOMIK {getReadableAppVersion()} • Audio Engineering and Design ·
+          Service Infrastructure
         </Text>
       </SafeScrollView>
+
+      <ThemedConfirmModal
+        visible={logoutOpen}
+        title="Log out?"
+        message="Are you sure you want to log out of your ATOMIK account?"
+        confirmLabel="LOG OUT"
+        cancelLabel="STAY"
+        confirmDestructive
+        loading={loggingOut}
+        icon="log-out-outline"
+        onConfirm={confirmLogout}
+        onCancel={() => {
+          if (!loggingOut) setLogoutOpen(false);
+        }}
+      />
     </Screen>
   );
 };
