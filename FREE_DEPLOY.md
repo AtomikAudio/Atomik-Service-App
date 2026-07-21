@@ -15,8 +15,8 @@
 3. Render reads root `render.yaml` and creates **`atomik-api`** (free plan, Singapore).
 4. When prompted, fill **secret** env vars using `backend/render.env.example` + your local `backend/.env` values.
 5. **MongoDB Atlas** → Network Access → allow `0.0.0.0/0` (free tier; tighten later).
-6. Wait for deploy → URL: **`https://atomik-api.onrender.com`**
-7. Test: `https://atomik-api.onrender.com/health` → `{"status":"ok",...}`
+6. Wait for deploy → URL: **`https://atomik-service-app.onrender.com`**
+7. Test: `https://atomik-service-app.onrender.com/health` → `{"status":"ok",...}`
 
 ### Option B — Deploy button
 
@@ -32,7 +32,7 @@ After health check passes:
 
 ```powershell
 cd frontend
-powershell -ExecutionPolicy Bypass -File ./scripts/set-eas-production-env.ps1 -ApiBaseUrl "https://atomik-api.onrender.com"
+powershell -ExecutionPolicy Bypass -File ./scripts/set-eas-production-env.ps1 -ApiBaseUrl "https://atomik-service-app.onrender.com"
 ```
 
 ---
@@ -51,7 +51,7 @@ Upload the new `.aab` to Play Console.
 ## Free tier notes
 
 - Render free sleeps after ~15 min idle; first request may take 30–60s.
-- Optional keep-warm: ping `https://atomik-api.onrender.com/health` every 10 min via [cron-job.org](https://cron-job.org) (free).
+- Optional keep-warm: ping `https://atomik-service-app.onrender.com/health` every 10 min via [cron-job.org](https://cron-job.org) (free).
 
 ---
 

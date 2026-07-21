@@ -23,7 +23,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://atomik-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://atomik-service-app.onrender.com/api"
       }
     },
     "production": {

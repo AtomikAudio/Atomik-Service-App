@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $base = $ApiBaseUrl.TrimEnd('/')
 if ($base -notmatch '^https://') {
-  throw "ApiBaseUrl must start with https:// (e.g. https://atomik-api.onrender.com)"
+  throw "ApiBaseUrl must start with https:// (e.g. https://atomik-service-app.onrender.com)"
 }
 $apiUrl = if ($base.EndsWith('/api')) { $base } else { "$base/api" }
 
