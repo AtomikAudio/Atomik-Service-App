@@ -19,7 +19,7 @@ export function getApiBaseUrl(): string {
     return 'http://localhost:5000/api';
   }
 
-  return 'https://atomik-api.onrender.com/api';
+  return 'https://atomik-service-app.onrender.com/api';
 }
 
 export const API_TIMEOUT_MS =

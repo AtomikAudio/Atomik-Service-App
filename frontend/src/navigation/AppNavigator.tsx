@@ -24,6 +24,7 @@ import {
 import { emitBookingChanged } from '../services/liveUpdates';
 import { navigateToBookingFromNotification } from './navigateFromNotification';
 import { ClientLiveEvents } from '../components/client/ClientLiveEvents';
+import { ServiceStatusOverlay } from '../components/common/ServiceStatusOverlay';
 
 const Stack = createNativeStackNavigator();
 
@@ -80,6 +81,7 @@ export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer ref={navigationRef}>
       <PushNotificationsBootstrap />
+      <ServiceStatusOverlay />
       <ClientLiveEvents
         navigationRef={navigationRef}
         enabled={

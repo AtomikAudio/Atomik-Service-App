@@ -148,7 +148,7 @@ module.exports = {
         // Linked via `eas init` (non-interactive)
         projectId: "30dcf4d7-36e2-43e2-b5eb-386aa267f6ce"
       },
-      apiUrl: process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://atomik-api.onrender.com/api',
+      apiUrl: process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://atomik-service-app.onrender.com/api',
     },
   },
 };

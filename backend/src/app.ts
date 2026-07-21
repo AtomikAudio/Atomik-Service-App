@@ -25,7 +25,10 @@ export function createApp(): express.Application {
   const app = express();
 
   if (process.env.NODE_ENV === 'production') {
-    app.set('trust proxy', 1);
+    // Behind Cloudflare → Render (two proxy hops). Trust both so req.ip / proto
+    // resolve correctly. Rate limiting keys on cf-connecting-ip directly, so it
+    // no longer depends on this value being exact.
+    app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 2);
   }
 
   const corsOrigins = (): string | string[] | boolean => {

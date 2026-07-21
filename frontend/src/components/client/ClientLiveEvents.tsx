@@ -22,7 +22,9 @@ import { ThemedConfirmModal } from '../common/ThemedConfirmModal';
  * surfaces a branded box on top of any screen. The last-seen state is persisted,
  * so a change that happened while the app was closed is announced on next open.
  */
-const POLL_MS = 4000;
+const POLL_MS = 15000;
+// When the API rate-limits us (429), stop hammering it for a while.
+const RATE_LIMIT_BACKOFF_MS = 90000;
 const SNAPSHOT_KEY = 'atomik_booking_snapshot_v1';
 const MAX_QUEUED_EVENTS = 3;
 
@@ -51,6 +53,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
   const snapshotRef = useRef<Snapshot | null>(null);
   const queueRef = useRef<LiveEvent[]>([]);
   const busyRef = useRef(false);
+  const backoffUntilRef = useRef(0);
   const [current, setCurrent] = useState<LiveEvent | null>(null);
 
   const showNext = useCallback(() => {
@@ -68,6 +71,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
 
   const poll = useCallback(async () => {
     if (!enabled || busyRef.current) return;
+    if (Date.now() < backoffUntilRef.current) return;
     busyRef.current = true;
     try {
       const bookings = await bookingService.getMyBookings({ limit: 30 });
@@ -116,8 +120,12 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
 
       // Broadcast so every focused screen refetches right away.
       if (changed) emitBookingChanged();
-    } catch {
-      // Transient network errors — keep the last snapshot and retry next tick.
+    } catch (err: any) {
+      // Back off hard on rate limiting so we stop compounding the problem.
+      if (err?.status === 429) {
+        backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+      }
+      // Otherwise transient — keep the last snapshot and retry next tick.
     } finally {
       busyRef.current = false;
     }
@@ -134,6 +142,17 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
+    const startInterval = () => {
+      if (interval) return;
+      interval = setInterval(() => void poll(), POLL_MS);
+    };
+    const stopInterval = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
     void (async () => {
       try {
         const raw = await AsyncStorage.getItem(SNAPSHOT_KEY);
@@ -143,19 +162,26 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
       }
       if (cancelled) return;
       void poll();
-      interval = setInterval(() => void poll(), POLL_MS);
+      startInterval();
     })();
 
     const appStateSub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
-        if (state === 'active') void poll();
+        // Only poll while the app is in the foreground — background timers just
+        // burn API quota (and battery) for updates the user can't see.
+        if (state === 'active') {
+          void poll();
+          startInterval();
+        } else {
+          stopInterval();
+        }
       }
     );
 
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      stopInterval();
       appStateSub.remove();
     };
   }, [enabled, poll]);

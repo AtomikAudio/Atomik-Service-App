@@ -23,7 +23,7 @@ interface LiveRefreshOptions {
  */
 export function useLiveRefresh(
   refresh: () => void | Promise<void>,
-  { intervalMs = 8000, enabled = true }: LiveRefreshOptions = {}
+  { intervalMs = 15000, enabled = true }: LiveRefreshOptions = {}
 ): void {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;

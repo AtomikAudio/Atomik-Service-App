@@ -1,6 +1,11 @@
 import axios from 'axios';
 import { clearToken, getToken, isDemoSessionToken } from './tokenStore';
 import { API_TIMEOUT_MS, getApiBaseUrl } from '../config/apiConfig';
+import { emitServiceBusy } from './appStatus';
+
+/** User-facing text shown when the API rate-limits/overloads (never the raw dev message). */
+const SERVICE_BUSY_MESSAGE =
+  'The app is undergoing quick maintenance. Please try again in a moment.';
 
 const BASE_URL = getApiBaseUrl();
 
@@ -56,6 +61,21 @@ api.interceptors.response.use(
         )
       );
     }
+    // Rate limited / overloaded: hide the raw dev message and surface a branded
+    // "under maintenance" box globally instead.
+    if (error.response?.status === 429) {
+      emitServiceBusy();
+      const apiError = new Error(SERVICE_BUSY_MESSAGE) as Error & {
+        status?: number;
+        retryAfter?: number;
+      };
+      apiError.status = 429;
+      if (typeof error.response?.data?.retryAfter === 'number') {
+        apiError.retryAfter = error.response.data.retryAfter;
+      }
+      return Promise.reject(apiError);
+    }
+
     const message =
       error.response?.data?.message ||
       error.message ||
