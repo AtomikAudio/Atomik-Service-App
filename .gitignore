@@ -21,6 +21,8 @@ dist/
 web-build/
 google-service-account.json
 frontend/google-service-account.json
+# Firebase Admin / FCM V1 private keys (never commit — upload to Expo credentials only)
+*firebase-adminsdk*.json
 credentials.json
 *.jks
 *.p8

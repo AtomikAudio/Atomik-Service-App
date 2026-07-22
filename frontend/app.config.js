@@ -14,6 +14,16 @@ const androidGoogleServicesFile = fs.existsSync(googleServicesPath)
   ? './google-services.json'
   : undefined;
 
+if (
+  process.env.EAS_BUILD_PROFILE === 'production' &&
+  !androidGoogleServicesFile
+) {
+  throw new Error(
+    'Production build blocked: frontend/google-services.json is missing. ' +
+      'Android push notifications will not work without Firebase FCM config.'
+  );
+}
+
 const PLACEHOLDER_API_HOSTS = [
   'YOUR_PRODUCTION_API_HOST',
   'YOUR_STAGING_API_HOST',
@@ -51,7 +61,7 @@ module.exports = {
   expo: {
     name: 'ATOMIK Audio',
     slug: 'atomik-audio',
-    version: '1.1.5',
+    version: '1.1.6',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'dark',
