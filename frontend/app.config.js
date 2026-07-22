@@ -6,21 +6,25 @@
 const fs = require('fs');
 const path = require('path');
 
-// FCM config for Android push. Drop your Firebase google-services.json in
-// frontend/ and it will be bundled automatically (required for Expo push to
-// deliver to Android — without it notifications never reach the tray).
+// FCM config for Android push.
+// Local: keep frontend/google-services.json (gitignored — never commit).
+// EAS: set production file env GOOGLE_SERVICES_JSON (eas env:create --type file).
+const googleServicesFromEnv = process.env.GOOGLE_SERVICES_JSON?.trim();
 const googleServicesPath = path.resolve(__dirname, 'google-services.json');
-const androidGoogleServicesFile = fs.existsSync(googleServicesPath)
-  ? './google-services.json'
-  : undefined;
+const androidGoogleServicesFile = googleServicesFromEnv
+  ? googleServicesFromEnv
+  : fs.existsSync(googleServicesPath)
+    ? './google-services.json'
+    : undefined;
 
 if (
   process.env.EAS_BUILD_PROFILE === 'production' &&
   !androidGoogleServicesFile
 ) {
   throw new Error(
-    'Production build blocked: frontend/google-services.json is missing. ' +
-      'Android push notifications will not work without Firebase FCM config.'
+    'Production build blocked: missing Firebase google-services.json. ' +
+      'Keep it locally at frontend/google-services.json (gitignored), and set ' +
+      'EAS production file env GOOGLE_SERVICES_JSON for cloud builds.'
   );
 }
 
