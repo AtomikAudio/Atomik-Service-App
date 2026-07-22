@@ -473,8 +473,28 @@ export const updateFcmToken = async (
       res.status(400).json({ success: false, message: 'Invalid FCM token' });
       return;
     }
+    // One device token → one user. Clear it from anyone else first so a shared
+    // phone / account switch does not keep delivering to the previous login.
+    await User.updateMany(
+      { fcmToken: token, _id: { $ne: req.user!.id } },
+      { $unset: { fcmToken: '' } }
+    );
     await User.findByIdAndUpdate(req.user!.id, { fcmToken: token });
     res.status(200).json({ success: true, message: 'FCM token updated' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** Clear the current user's push token (call on logout so pushes stop). */
+export const clearFcmToken = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    await User.findByIdAndUpdate(req.user!.id, { $unset: { fcmToken: '' } });
+    res.status(200).json({ success: true, message: 'FCM token cleared' });
   } catch (err) {
     next(err);
   }

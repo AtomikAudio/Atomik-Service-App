@@ -48,11 +48,17 @@ export const notifyClientBooking = async (
 
   const user = await User.findById(userId).select('fcmToken isActive');
   if (user?.isActive && user.fcmToken) {
-    await sendExpoPushToTokens([user.fcmToken], {
+    const { invalidTokens } = await sendExpoPushToTokens([user.fcmToken], {
       title: payload.title,
       body: payload.body,
       data,
     });
+    if (invalidTokens.length > 0) {
+      await User.updateMany(
+        { fcmToken: { $in: invalidTokens } },
+        { $unset: { fcmToken: '' } }
+      );
+    }
   }
 };
 

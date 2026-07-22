@@ -10,6 +10,7 @@ import {
   setToken,
 } from './tokenStore';
 import { getApiBaseUrl } from '../config/apiConfig';
+import { unregisterPushNotifications } from './pushNotifications';
 
 export interface AuthUser {
   id: string;
@@ -331,6 +332,9 @@ export const authService = {
   },
 
   async logout(): Promise<void> {
+    // Clear push token while JWT is still valid so this device stops receiving
+    // notifications for the logged-out account.
+    await unregisterPushNotifications();
     await clearToken();
   },
 

@@ -10,6 +10,7 @@ import {
   resetPassword,
   resetPasswordWithPhone,
   updateFcmToken,
+  clearFcmToken,
   updateProfile,
   uploadAvatar,
   deleteAccount,
@@ -99,6 +100,7 @@ router.post(
   uploadAvatar
 );
 router.patch('/fcm-token', authenticate, fcmTokenRules, validate, updateFcmToken);
+router.delete('/fcm-token', authenticate, clearFcmToken);
 router.delete('/account', authenticate, deleteAccount);
 
 export default router;

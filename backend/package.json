@@ -13,6 +13,7 @@
     "seed": "ts-node src/scripts/seed.ts",
     "seed:staff": "ts-node src/scripts/seedStaff.ts",
     "free:slots": "ts-node src/scripts/freeSlots.ts",
+    "clear:push-tokens": "ts-node src/scripts/clearPushTokens.ts",
     "clear-demo-data": "ts-node src/scripts/clearDemoData.ts",
     "twilio:test": "ts-node src/scripts/testTwilio.ts",
     "check-secrets": "ts-node scripts/check-secrets.ts"

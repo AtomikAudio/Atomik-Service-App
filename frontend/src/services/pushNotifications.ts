@@ -100,6 +100,18 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 }
 
+/**
+ * Remove this device's push token from the backend so notifications stop after logout.
+ * Safe to call even when already logged out / offline (best-effort).
+ */
+export async function unregisterPushNotifications(): Promise<void> {
+  try {
+    await api.delete('/auth/fcm-token');
+  } catch {
+    // Best-effort — token/JWT may already be gone.
+  }
+}
+
 export function addNotificationReceivedListener(
   listener: (notification: NotificationsTypes.Notification) => void
 ) {
