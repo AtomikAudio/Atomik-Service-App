@@ -149,11 +149,17 @@ export async function settleInvoicePayment(
 
   const payer = await User.findById(notifyUserId).select('fcmToken isActive');
   if (payer?.isActive && payer.fcmToken) {
-    await sendExpoPushToTokens([payer.fcmToken], {
+    const { invalidTokens } = await sendExpoPushToTokens([payer.fcmToken], {
       title: paymentTitle,
       body: paymentBody,
       data: paymentData,
     });
+    if (invalidTokens.length > 0) {
+      await User.updateMany(
+        { fcmToken: { $in: invalidTokens } },
+        { $unset: { fcmToken: '' } }
+      );
+    }
   }
 
   const bookingRef = booking?.bookingId

@@ -400,13 +400,10 @@ export const updateBookingStatus = async (
         const inv = await Invoice.findById(updated.invoiceId);
         const balanceDue = inv ? getInvoiceBalanceDue(inv) : 0;
         if (balanceDue > 0) {
-          await Notification.create({
-            userId: booking.clientId,
+          await notifyClientBooking(booking, {
             title: 'Extra parts — payment due',
             body: `₹${balanceDue.toLocaleString('en-IN')} for spare parts on booking ${booking.bookingId}. Open the app to pay.`,
             type: 'warning',
-            category: 'payment',
-            data: { bookingId: booking._id, invoiceId: inv?._id },
           });
         }
       }

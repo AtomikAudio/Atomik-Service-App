@@ -96,7 +96,12 @@ export async function sendExpoPushToTokens(
         console.warn(
           `[push] Ticket error for ${token}: ${code} — ${ticket.message ?? ''}`
         );
-        if (code === 'DeviceNotRegistered') {
+        // Drop permanently-bad tokens so the device can re-register on next login.
+        if (
+          code === 'DeviceNotRegistered' ||
+          code === 'InvalidCredentials' ||
+          code === 'MismatchSenderId'
+        ) {
           invalidTokens.push(token);
         }
       });
