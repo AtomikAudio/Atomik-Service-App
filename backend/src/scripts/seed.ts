@@ -7,6 +7,7 @@ import { Invoice } from '../models/Invoice';
 import { Venue } from '../models/Venue';
 import { AppConfig } from '../models/AppConfig';
 import { clearDemoData } from './clearDemoData';
+import { upsertAllStaff } from './seedStaff';
 
 // Windows / corporate DNS often fails SRV lookups for mongodb+srv — use public resolvers.
 dns.setServers(['8.8.8.8', '1.1.1.1']);
@@ -273,9 +274,20 @@ async function seed() {
   await seedTwilioConfig();
   await seedSendgridConfig();
 
+  console.log('\nSeeding / refreshing staff accounts (never removed by seed)...\n');
+  try {
+    await upsertAllStaff();
+  } catch (err) {
+    console.error(
+      '  Staff seed skipped/failed — set STAFF_*_PASSWORD vars in backend/.env'
+    );
+    console.error(err instanceof Error ? err.message : err);
+  }
+
   console.log(`\nDemo login (password from DEMO_USER_PASSWORD env)`);
   console.log('Sign in with email OR phone + password — role routes automatically.');
   console.log('Master technician: master@atomik.demo — open job ATM90001 ready to assign.');
+  console.log('Staff logins: see STAFF_CREDENTIALS.local.md (local only).');
   console.log('Emails: welcome on signup, order details on booking (SendGrid).');
   if (process.env.TWILIO_FROM_NUMBER?.trim()) {
     console.log('Twilio From:', process.env.TWILIO_FROM_NUMBER.trim());

@@ -1,7 +1,11 @@
 import 'dotenv/config';
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { toE164 } from '../utils/phone';
+
+// Windows / corporate DNS often fails SRV lookups for mongodb+srv — use public resolvers.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 type StaffRole = 'admin' | 'master_technician' | 'technician';
 
@@ -24,7 +28,7 @@ interface StaffAccount {
  * so they never land in git. Set them in backend/.env (gitignored). The plaintext
  * values live only in the local, gitignored STAFF_CREDENTIALS.local.md.
  */
-const STAFF: StaffAccount[] = [
+export const STAFF: StaffAccount[] = [
   // Technicians
   {
     name: 'Raju',
@@ -66,6 +70,20 @@ const STAFF: StaffAccount[] = [
   },
 ];
 
+/** Emails that must never be wiped by `npm run seed` / clearDemoData. */
+export function getStaffPreserveEmails(): string[] {
+  return STAFF.map((s) => s.email?.trim().toLowerCase()).filter(
+    (e): e is string => Boolean(e)
+  );
+}
+
+/** E.164 phones that must never be wiped by `npm run seed` / clearDemoData. */
+export function getStaffPreservePhones(): string[] {
+  return STAFF.map((s) => (s.phone ? toE164(s.phone) : null)).filter(
+    (p): p is string => Boolean(p)
+  );
+}
+
 function resolvePassword(account: StaffAccount): string {
   const password = process.env[account.passwordEnv]?.trim();
   if (!password) {
@@ -103,12 +121,10 @@ async function upsertStaff(account: StaffAccount): Promise<'created' | 'updated'
   if (!account.phone && !account.email) {
     throw new Error(`${account.name}: a phone or email is required`);
   }
-  const phone = account.phone ? toE164(account.phone) : undefined; // -> +91XXXXXXXXXX
+  const phone = account.phone ? toE164(account.phone) : undefined;
   const email = account.email?.trim().toLowerCase();
   const password = resolvePassword(account);
 
-  // Match an existing account by phone or email. Only one master_technician is
-  // allowed by the schema, so reuse the existing master slot when seeding it.
   const user =
     (phone ? await User.findOne({ phone }).select('+password') : null) ??
     (email ? await User.findOne({ email }).select('+password') : null) ??
@@ -140,6 +156,21 @@ async function upsertStaff(account: StaffAccount): Promise<'created' | 'updated'
   return 'created';
 }
 
+/**
+ * Upsert all production staff accounts. Safe to call from `npm run seed` —
+ * never deletes anyone; only creates/updates the STAFF list.
+ * Requires mongoose to already be connected.
+ */
+export async function upsertAllStaff(): Promise<void> {
+  await ensureSparseEmailIndex();
+
+  for (const account of STAFF) {
+    const result = await upsertStaff(account);
+    const login = account.phone ? `+91${account.phone}` : account.email ?? '';
+    console.log(`  ${result.padEnd(7)} ${account.role.padEnd(18)} ${login}`);
+  }
+}
+
 async function run(): Promise<void> {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -151,19 +182,15 @@ async function run(): Promise<void> {
   console.log(`Connected to database: ${mongoose.connection.db?.databaseName}`);
   console.log('Seeding staff accounts (non-destructive)...\n');
 
-  await ensureSparseEmailIndex();
-
-  for (const account of STAFF) {
-    const result = await upsertStaff(account);
-    const login = account.phone ? `+91${account.phone}` : account.email ?? '';
-    console.log(`  ${result.padEnd(7)} ${account.role.padEnd(18)} ${login}`);
-  }
+  await upsertAllStaff();
 
   console.log('\nDone. Sign in with the phone number (10 digits) or email + password.');
   await mongoose.disconnect();
 }
 
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

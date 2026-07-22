@@ -10,6 +10,10 @@ import { Technician } from '../models/Technician';
 import { AdminAuditLog } from '../models/AdminAuditLog';
 import { OtpVerification } from '../models/OtpVerification';
 import { SlotHold } from '../models/SlotHold';
+import {
+  getStaffPreserveEmails,
+  getStaffPreservePhones,
+} from './seedStaff';
 
 const DEMO_EMAILS = [
   'client@atomik.demo',
@@ -19,25 +23,52 @@ const DEMO_EMAILS = [
 ];
 
 export async function clearDemoData(): Promise<void> {
+  const preserveEmails = [
+    ...DEMO_EMAILS.map((e) => e.toLowerCase()),
+    ...getStaffPreserveEmails(),
+  ];
+  const preservePhones = getStaffPreservePhones();
+
   const demoUsers = await User.find({
     email: { $in: DEMO_EMAILS.map((e) => e.toLowerCase()) },
   }).select('_id email');
 
-  const [bookings, invoices, notifications, venues, reviews, technicians, audits, otps, holds, otherUsers] =
-    await Promise.all([
-      Booking.deleteMany({}),
-      Invoice.deleteMany({}),
-      Notification.deleteMany({}),
-      Venue.deleteMany({}),
-      Review.deleteMany({}),
-      Technician.deleteMany({}),
-      AdminAuditLog.deleteMany({}),
-      OtpVerification.deleteMany({}),
-      SlotHold.deleteMany({}),
-      User.deleteMany({
-        email: { $nin: DEMO_EMAILS.map((e) => e.toLowerCase()) },
-      }),
-    ]);
+  const staffUsers = await User.find({
+    $or: [
+      { email: { $in: getStaffPreserveEmails() } },
+      { phone: { $in: preservePhones } },
+    ],
+  }).select('_id name phone email role');
+
+  const [
+    bookings,
+    invoices,
+    notifications,
+    venues,
+    reviews,
+    technicians,
+    audits,
+    otps,
+    holds,
+    otherUsers,
+  ] = await Promise.all([
+    Booking.deleteMany({}),
+    Invoice.deleteMany({}),
+    Notification.deleteMany({}),
+    Venue.deleteMany({}),
+    Review.deleteMany({}),
+    Technician.deleteMany({}),
+    AdminAuditLog.deleteMany({}),
+    OtpVerification.deleteMany({}),
+    SlotHold.deleteMany({}),
+    // Keep demo + real staff accounts forever — never wipe STAFF_CREDENTIALS logins.
+    User.deleteMany({
+      $nor: [
+        { email: { $in: preserveEmails } },
+        { phone: { $in: preservePhones } },
+      ],
+    }),
+  ]);
 
   console.log(`  deleted ${bookings.deletedCount} booking(s)`);
   console.log(`  deleted ${invoices.deletedCount} invoice(s)`);
@@ -48,9 +79,13 @@ export async function clearDemoData(): Promise<void> {
   console.log(`  deleted ${audits.deletedCount} audit log(s)`);
   console.log(`  deleted ${otps.deletedCount} OTP record(s)`);
   console.log(`  deleted ${holds.deletedCount} slot hold(s)`);
-  console.log(`  deleted ${otherUsers.deletedCount} non-demo user(s)`);
+  console.log(`  deleted ${otherUsers.deletedCount} non-demo/non-staff user(s)`);
   console.log(`  kept ${demoUsers.length} demo account(s):`);
   demoUsers.forEach((u) => console.log(`    - ${u.email}`));
+  console.log(`  kept ${staffUsers.length} staff account(s):`);
+  staffUsers.forEach((u) =>
+    console.log(`    - ${u.name} (${u.role}) ${u.phone || u.email || ''}`)
+  );
 }
 
 async function main() {
@@ -67,11 +102,13 @@ async function main() {
 
   await mongoose.connect(uri);
   console.log(`Connected to database: ${mongoose.connection.db?.databaseName}`);
-  console.log('Clearing operational demo data (keeping @atomik.demo accounts)...\n');
+  console.log(
+    'Clearing operational demo data (keeping @atomik.demo + staff accounts)...\n'
+  );
 
   await clearDemoData();
 
-  console.log('\nDone. Run npm run seed to refresh demo account passwords.');
+  console.log('\nDone. Run npm run seed to refresh demo + staff accounts.');
   await mongoose.disconnect();
 }
 
