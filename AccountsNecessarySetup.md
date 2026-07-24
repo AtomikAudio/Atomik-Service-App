@@ -23,7 +23,7 @@ Who owns which account, what each service is for, and what else you still need t
 | **Cloudinary** (images) | _intern1@atomikaudio.com_ | Required for avatars + booking photos |
 | **Google Cloud** (Maps / Places) | _TBD_ | Required for map picker + address autofill in release |
 | **Render** (API host) | _siddhant@atomikaudio.com_ | Production backend (`atomik-service-app.onrender.com`) |
-| **Google Play Console** | _siddhant@atomikaudio.com_ | Store listing + AAB releases |
+| **Google Play Console** | _siddhant@atomikaudio.com_ _verified via vasi sir details_ | Store listing + AAB releases |
 | **GitHub** (repo / keep-warm) | _siddhant@atomikaudio.com_ | Deploy + uptime ping workflow |
 | **Domain / DNS** (`atomikaudio.com`) | _Atomik_ | Website, privacy URL, email if needed |
 

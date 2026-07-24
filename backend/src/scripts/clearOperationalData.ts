@@ -6,6 +6,7 @@
  *   CONFIRM=YES npx ts-node src/scripts/clearOperationalData.ts
  */
 import 'dotenv/config';
+import dns from 'dns';
 import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Booking } from '../models/Booking';
@@ -17,6 +18,9 @@ import { OtpVerification } from '../models/OtpVerification';
 import { SlotHold } from '../models/SlotHold';
 import { Technician } from '../models/Technician';
 import { Venue } from '../models/Venue';
+
+// Windows / some networks refuse Node's default SRV lookup for mongodb+srv.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 async function main() {
   if (process.env.CONFIRM !== 'YES') {
