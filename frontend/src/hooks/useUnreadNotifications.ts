@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { notificationService } from '../services/notifications';
+import { subscribeBookingChanged } from '../services/liveUpdates';
 
 const POLL_MS = 30000;
 
@@ -20,7 +21,13 @@ export const useUnreadNotifications = () => {
     useCallback(() => {
       refresh();
       const id = setInterval(refresh, POLL_MS);
-      return () => clearInterval(id);
+      const unsubscribe = subscribeBookingChanged(() => {
+        void refresh();
+      });
+      return () => {
+        clearInterval(id);
+        unsubscribe();
+      };
     }, [refresh])
   );
 

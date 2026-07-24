@@ -4,12 +4,28 @@ import { authenticate, authorize } from '../middleware/auth';
 import { mongoIdParamRules, validate } from '../middleware/validators';
 import {
   createReview,
+  getMyRating,
   getReviewForBooking,
+  getTechnicianReviewsForAdmin,
 } from '../controllers/reviewController';
 
 const router = Router();
 
 router.use(authenticate);
+
+router.get(
+  '/me',
+  authorize('technician', 'master_technician'),
+  getMyRating
+);
+
+router.get(
+  '/technician/:technicianId',
+  authorize('admin'),
+  ...mongoIdParamRules('technicianId'),
+  validate,
+  getTechnicianReviewsForAdmin
+);
 
 router.get(
   '/booking/:bookingId',

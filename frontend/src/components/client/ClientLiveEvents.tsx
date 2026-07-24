@@ -3,16 +3,27 @@ import { AppState, AppStateStatus, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NavigationContainerRef } from '@react-navigation/native';
 
-import { bookingService } from '../../services/bookings';
+import { bookingService, Booking } from '../../services/bookings';
 import { reviewService } from '../../services/reviews';
 import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
-import { emitBookingChanged } from '../../services/liveUpdates';
+import {
+  emitBookingChanged,
+  subscribeBookingChanged,
+} from '../../services/liveUpdates';
 import { navigateToBookingFromNotification } from '../../navigation/navigateFromNotification';
+import {
+  getClientSparePartsPayAmount,
+  invoiceNeedsPayment,
+  isExtraPartsOnlyPayment,
+} from '../../utils/invoice';
+import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
+import { formatINR } from '../../utils/payment';
 import {
   hasRatedBooking,
   markBookingRated,
   markRatingSkipped,
   shouldPromptRating,
+  shouldShowCompletionDialog,
 } from '../../utils/ratingPrompt';
 import {
   ThemedAlertModal,
@@ -23,23 +34,32 @@ import { RateTechnicianModal } from './RateTechnicianModal';
 /**
  * Near-instant live updates for clients, without waiting on push delivery.
  *
- * Detects technician assigned / dropped / service completed transitions and
- * surfaces branded dialogs. After "Service completed", the rate-technician
- * dialog is queued next.
+ * Detects technician assigned / dropped / service completed / extra-parts-due
+ * transitions and surfaces branded dialogs.
+ *
+ * Polls on an interval as a fallback (Expo Go has no remote push), and also
+ * immediately when a foreground push / booking-changed signal arrives.
  */
-const POLL_MS = 15000;
+const POLL_MS = 5000;
 const RATE_LIMIT_BACKOFF_MS = 90000;
-const SNAPSHOT_KEY = 'atomik_booking_snapshot_v1';
+const SNAPSHOT_KEY = 'atomik_booking_snapshot_v2';
 const COMPLETED_SEEN_KEY = 'atomik_completed_dialog_seen_v1';
-const MAX_QUEUED_EVENTS = 6;
+const EXTRA_PARTS_SEEN_KEY = 'atomik_extra_parts_dialog_seen_v1';
+const MAX_QUEUED_EVENTS = 8;
 
-type Snapshot = Record<string, { t: string | null; s: string }>;
+type Snapshot = Record<
+  string,
+  { t: string | null; s: string; pk: string }
+>;
 
 interface LiveEvent {
   bookingId: string;
-  kind: 'assigned' | 'dropped' | 'completed' | 'rate';
+  kind: 'assigned' | 'dropped' | 'completed' | 'rate' | 'extra_parts';
   techName?: string;
   service?: string;
+  amountLabel?: string;
+  /** Needed to open Payment with payFor=extra_parts */
+  booking?: Booking;
 }
 
 interface Props {
@@ -52,6 +72,19 @@ interface Props {
 function formatService(service?: string): string {
   if (!service) return 'service';
   return service.replace(/[_-]+/g, ' ').trim() || 'service';
+}
+
+function partsFingerprint(b: Booking): string {
+  const partsTotal = Math.round(sumSparePartsTotal(b.spareParts) * 100);
+  const balance = Math.round((b.invoice?.balanceDue ?? 0) * 100);
+  return `${partsTotal}:${balance}`;
+}
+
+function isExtraPartsDue(b: Booking): boolean {
+  return (
+    invoiceNeedsPayment(b.invoice) &&
+    isExtraPartsOnlyPayment(b.invoice, b.spareParts)
+  );
 }
 
 async function hasSeenCompletedDialog(bookingId: string): Promise<boolean> {
@@ -84,10 +117,47 @@ async function markCompletedDialogSeen(bookingId: string): Promise<void> {
   }
 }
 
+async function hasSeenExtraPartsDialog(
+  bookingId: string,
+  fingerprint: string
+): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(EXTRA_PARTS_SEEN_KEY);
+    if (!raw) return false;
+    const map = JSON.parse(raw) as Record<string, string>;
+    return map?.[bookingId] === fingerprint;
+  } catch {
+    return false;
+  }
+}
+
+async function markExtraPartsDialogSeen(
+  bookingId: string,
+  fingerprint: string
+): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(EXTRA_PARTS_SEEN_KEY);
+    const map: Record<string, string> = raw
+      ? (JSON.parse(raw) as Record<string, string>)
+      : {};
+    map[bookingId] = fingerprint;
+    const keys = Object.keys(map);
+    if (keys.length > 80) {
+      keys.slice(0, keys.length - 80).forEach((k) => {
+        delete map[k];
+      });
+    }
+    await AsyncStorage.setItem(EXTRA_PARTS_SEEN_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
 export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => {
   const snapshotRef = useRef<Snapshot | null>(null);
   const queueRef = useRef<LiveEvent[]>([]);
   const busyRef = useRef(false);
+  const pendingPollRef = useRef(false);
   const backoffUntilRef = useRef(0);
   const [current, setCurrent] = useState<LiveEvent | null>(null);
   const [ratingLoading, setRatingLoading] = useState(false);
@@ -110,12 +180,15 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
   );
 
   const enqueueCompletedFlow = useCallback(
-    async (
-      bookingId: string,
-      techName: string | undefined,
-      service: string | undefined
-    ) => {
-      if (!(await hasSeenCompletedDialog(bookingId))) {
+    async (b: Booking) => {
+      const bookingId = b._id;
+      const techName = b.technicianId?.name;
+      const service = b.serviceType;
+
+      if (
+        shouldShowCompletionDialog(b) &&
+        !(await hasSeenCompletedDialog(bookingId))
+      ) {
         enqueue({
           bookingId,
           kind: 'completed',
@@ -123,7 +196,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
           service,
         });
       }
-      if (await shouldPromptRating(bookingId)) {
+      if (await shouldPromptRating(bookingId, b)) {
         enqueue({
           bookingId,
           kind: 'rate',
@@ -135,10 +208,34 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     [enqueue]
   );
 
+  const enqueueExtraPartsDue = useCallback(
+    async (b: Booking) => {
+      if (!isExtraPartsDue(b)) return;
+      const fp = partsFingerprint(b);
+      if (await hasSeenExtraPartsDialog(b._id, fp)) return;
+      const amount = getClientSparePartsPayAmount(b.invoice, b.spareParts);
+      enqueue({
+        bookingId: b._id,
+        kind: 'extra_parts',
+        service: b.serviceType,
+        amountLabel: formatINR(amount),
+        booking: b,
+      });
+    },
+    [enqueue]
+  );
+
   const poll = useCallback(async () => {
-    if (!enabled || busyRef.current) return;
+    if (!enabled) return;
     if (Date.now() < backoffUntilRef.current) return;
+    if (busyRef.current) {
+      // A push/signal arrived mid-poll — run again once this finishes so we
+      // don't miss a just-completed booking.
+      pendingPollRef.current = true;
+      return;
+    }
     busyRef.current = true;
+    pendingPollRef.current = false;
     try {
       const bookings = await bookingService.getMyBookings({ limit: 30 });
       const prev = snapshotRef.current;
@@ -149,11 +246,18 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
         const id = b._id;
         const techNow = resolveAssignedTechnicianId(b);
         const status = b.status;
-        next[id] = { t: techNow, s: status };
+        const pk = partsFingerprint(b);
+        next[id] = { t: techNow, s: status, pk };
 
         const prevEntry = prev?.[id];
         if (prevEntry) {
-          if (prevEntry.t !== techNow || prevEntry.s !== status) changed = true;
+          if (
+            prevEntry.t !== techNow ||
+            prevEntry.s !== status ||
+            prevEntry.pk !== pk
+          ) {
+            changed = true;
+          }
           const active = !['completed', 'cancelled'].includes(status);
           if (active && !prevEntry.t && techNow) {
             enqueue({
@@ -169,21 +273,30 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
             status === 'completed' &&
             techNow
           ) {
-            await enqueueCompletedFlow(
-              id,
-              b.technicianId?.name,
-              b.serviceType
-            );
+            await enqueueCompletedFlow(b);
+          }
+
+          // Extra parts newly quoted / balance increased while base was already paid.
+          const prevParts = Number(
+            String(prevEntry.pk ?? '0:0').split(':')[0] || 0
+          );
+          const nowParts = Math.round(sumSparePartsTotal(b.spareParts) * 100);
+          if (isExtraPartsDue(b) && nowParts > prevParts) {
+            await enqueueExtraPartsDue(b);
+          } else if (
+            isExtraPartsDue(b) &&
+            (prevEntry.pk ?? '0:0') !== pk &&
+            (b.invoice?.balanceDue ?? 0) > 0
+          ) {
+            await enqueueExtraPartsDue(b);
           }
         } else if (prev) {
           changed = true;
-          // App opened after completion while offline — announce once.
           if (status === 'completed' && techNow) {
-            await enqueueCompletedFlow(
-              id,
-              b.technicianId?.name,
-              b.serviceType
-            );
+            await enqueueCompletedFlow(b);
+          }
+          if (isExtraPartsDue(b)) {
+            await enqueueExtraPartsDue(b);
           }
         }
       }
@@ -192,7 +305,26 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
         for (const id of Object.keys(prev)) {
           if (!next[id]) {
             changed = true;
-            break;
+            // Dropped out of the list — may have just completed. Confirm so the
+            // client still gets the service-completed dialog on Home.
+            if (prev[id].s !== 'completed') {
+              try {
+                const b = await bookingService.getBookingById(id);
+                if (b.status === 'completed') {
+                  const techNow = resolveAssignedTechnicianId(b);
+                  next[id] = {
+                    t: techNow,
+                    s: b.status,
+                    pk: partsFingerprint(b),
+                  };
+                  if (techNow) {
+                    await enqueueCompletedFlow(b);
+                  }
+                }
+              } catch {
+                // ignore — booking may be gone / unauthorized
+              }
+            }
           }
         }
       }
@@ -209,8 +341,14 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
       }
     } finally {
       busyRef.current = false;
+      if (pendingPollRef.current) {
+        pendingPollRef.current = false;
+        setTimeout(() => {
+          void poll();
+        }, 0);
+      }
     }
-  }, [enabled, enqueue, enqueueCompletedFlow]);
+  }, [enabled, enqueue, enqueueCompletedFlow, enqueueExtraPartsDue]);
 
   useEffect(() => {
     if (!enabled) {
@@ -246,6 +384,12 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
       startInterval();
     })();
 
+    // Foreground push / other live signals → poll now so completion dialogs
+    // appear without waiting for the interval or leaving Home.
+    const unsubscribeLive = subscribeBookingChanged(() => {
+      void poll();
+    });
+
     const appStateSub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
@@ -261,6 +405,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     return () => {
       cancelled = true;
       stopInterval();
+      unsubscribeLive();
       appStateSub.remove();
     };
   }, [enabled, poll]);
@@ -274,6 +419,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     const ev = current;
     if (ev?.kind === 'completed') {
       void markCompletedDialogSeen(ev.bookingId);
+      void bookingService.acknowledgeCompletion(ev.bookingId).catch(() => {});
     }
     handleClose();
   }, [current, handleClose]);
@@ -282,6 +428,7 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     const ev = current;
     if (ev?.kind === 'rate' && !(await hasRatedBooking(ev.bookingId))) {
       await markRatingSkipped(ev.bookingId);
+      void bookingService.dismissRatingPrompt(ev.bookingId).catch(() => {});
     }
     handleClose();
   }, [current, handleClose]);
@@ -311,6 +458,61 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     },
     [current]
   );
+
+  const handleExtraPartsOkay = useCallback(() => {
+    const ev = current;
+    if (ev?.kind === 'extra_parts' && ev.booking) {
+      void markExtraPartsDialogSeen(ev.bookingId, partsFingerprint(ev.booking));
+    }
+    // Refresh home/upcoming so the PAID badge flips to Unpaid / PAY EXTRA.
+    emitBookingChanged(ev?.bookingId);
+    handleClose();
+  }, [current, handleClose]);
+
+  const handleExtraPartsPayNow = useCallback(() => {
+    const ev = current;
+    if (ev?.kind === 'extra_parts' && ev.booking) {
+      void markExtraPartsDialogSeen(ev.bookingId, partsFingerprint(ev.booking));
+    }
+    setCurrent(null);
+    const nav = navigationRef.current;
+    const booking = ev?.booking;
+    const invoiceId = booking?.invoice?._id;
+    if (nav && booking && invoiceId) {
+      nav.navigate(
+        'Client' as never,
+        {
+          screen: 'ClientTabs',
+          params: {
+            screen: 'Home',
+            params: {
+              screen: 'Payment',
+              params: {
+                bookingId: booking._id,
+                invoiceId,
+                serviceType: booking.serviceType,
+                date: booking.scheduledDate,
+                time: booking.scheduledTime,
+                payFor: 'extra_parts' as const,
+              },
+            },
+          },
+        } as never
+      );
+    } else if (nav && ev) {
+      navigateToBookingFromNotification(
+        {
+          dispatch: nav.dispatch.bind(nav),
+          navigate: nav.navigate.bind(nav) as (...args: any[]) => void,
+        },
+        'client',
+        ev.bookingId,
+        { fromRoot: true }
+      );
+    }
+    emitBookingChanged(ev?.bookingId);
+    setTimeout(showNext, 400);
+  }, [current, navigationRef, showNext]);
 
   const handleViewMore = useCallback(() => {
     const ev = current;
@@ -357,6 +559,23 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
         buttonLabel="OKAY"
         icon="checkmark-circle-outline"
         onClose={handleCompletedClose}
+      />
+    );
+  }
+
+  if (current.kind === 'extra_parts') {
+    const service = formatService(current.service);
+    const amount = current.amountLabel || 'the balance';
+    return (
+      <ThemedConfirmModal
+        visible
+        title="Extra parts payment due"
+        message={`Chargeable parts were added to your ${service} booking. Amount due: ${amount}. Pay now to settle, or continue and pay from your booking.`}
+        confirmLabel="PAY NOW"
+        cancelLabel="OKAY"
+        icon="card-outline"
+        onConfirm={handleExtraPartsPayNow}
+        onCancel={handleExtraPartsOkay}
       />
     );
   }

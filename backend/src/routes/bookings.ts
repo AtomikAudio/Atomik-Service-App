@@ -14,6 +14,8 @@ import {
   proposeReschedule,
   respondToReschedule,
   uploadServiceImages,
+  acknowledgeCompletion,
+  dismissRatingPrompt,
 } from '../controllers/bookingController';
 import {
   createSlotHold,
@@ -108,6 +110,20 @@ router.patch(
   updateBookingStatusRules,
   validate,
   updateBookingStatus
+);
+router.patch(
+  '/:id/ack-completion',
+  ...mongoIdParamRules('id'),
+  validate,
+  authorize('client'),
+  acknowledgeCompletion
+);
+router.patch(
+  '/:id/dismiss-rating',
+  ...mongoIdParamRules('id'),
+  validate,
+  authorize('client'),
+  dismissRatingPrompt
 );
 router.patch(
   '/:id/assign',

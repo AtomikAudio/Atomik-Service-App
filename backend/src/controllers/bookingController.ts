@@ -35,6 +35,7 @@ import {
 import { parseBookingStatus, parsePagination, toObjectId } from '../utils/mongoQuery';
 import { Venue } from '../models/Venue';
 import { Technician } from '../models/Technician';
+import { Review } from '../models/Review';
 import {
   assertValidHoldForBooking,
   consumeHold,
@@ -50,6 +51,29 @@ const generateBookingId = (): string => {
   const num = Math.floor(10000 + Math.random() * 90000);
   return `ATM${num}`;
 };
+
+/** Attach `clientHasReviewed` so the app only prompts to rate once (DB source of truth). */
+async function withClientReviewFlags<T extends Record<string, any>>(
+  bookings: T[],
+  role: string
+): Promise<T[]> {
+  if (role !== 'client' || bookings.length === 0) return bookings;
+  const completedIds = bookings
+    .filter((b) => b.status === 'completed')
+    .map((b) => b._id)
+    .filter(Boolean);
+  if (completedIds.length === 0) {
+    return bookings.map((b) => ({ ...b, clientHasReviewed: false }));
+  }
+  const reviews = await Review.find({ bookingId: { $in: completedIds } })
+    .select('bookingId')
+    .lean();
+  const reviewed = new Set(reviews.map((r) => String(r.bookingId)));
+  return bookings.map((b) => ({
+    ...b,
+    clientHasReviewed: reviewed.has(String(b._id)),
+  }));
+}
 
 const generateInvoiceNumber = (): string => {
   const num = Math.floor(10000 + Math.random() * 90000);
@@ -226,9 +250,12 @@ export const getMyBookings = async (
 
     const total = await Booking.countDocuments(filter);
 
+    const serialized = serializeBookingsForRole(bookingsForResponse, role);
+    const bookingsOut = await withClientReviewFlags(serialized, role);
+
     res.status(200).json({
       success: true,
-      bookings: serializeBookingsForRole(bookingsForResponse, role),
+      bookings: bookingsOut,
       pagination: { page, limit, total },
     });
   } catch (err) {
@@ -308,10 +335,11 @@ export const getBookingById = async (
     if (poolView) {
       payload = redactBookingForPoolView(payload) as typeof payload;
     }
+    const [withFlags] = await withClientReviewFlags([payload], role);
 
     res.status(200).json({
       success: true,
-      booking: payload,
+      booking: withFlags,
     });
   } catch (err) {
     next(err);
@@ -1229,6 +1257,89 @@ export const uploadServiceImages = async (
       success: true,
       serviceImages: booking.serviceImages,
       booking: serializeBookingForRole(populated, req.user!.role),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** Client acknowledges the in-app "Service completed" dialog (show once). */
+export const acknowledgeCompletion = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = toObjectId(req.params.id);
+    const booking = await Booking.findById(bookingId).select(
+      'clientId status clientCompletionAckAt'
+    );
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+    if (String(booking.clientId) !== req.user!.id) {
+      res.status(403).json({ success: false, message: 'Access denied' });
+      return;
+    }
+    if (booking.status !== 'completed') {
+      res.status(400).json({
+        success: false,
+        message: 'Booking is not completed yet',
+      });
+      return;
+    }
+    if (!booking.clientCompletionAckAt) {
+      booking.clientCompletionAckAt = new Date();
+      await booking.save();
+    }
+    res.status(200).json({
+      success: true,
+      clientCompletionAckAt: booking.clientCompletionAckAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** Client dismisses the rate prompt without submitting (do not ask again). */
+export const dismissRatingPrompt = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = toObjectId(req.params.id);
+    const booking = await Booking.findById(bookingId).select(
+      'clientId status clientRatingDismissedAt clientCompletionAckAt'
+    );
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+    if (String(booking.clientId) !== req.user!.id) {
+      res.status(403).json({ success: false, message: 'Access denied' });
+      return;
+    }
+    if (booking.status !== 'completed') {
+      res.status(400).json({
+        success: false,
+        message: 'Booking is not completed yet',
+      });
+      return;
+    }
+    const now = new Date();
+    if (!booking.clientRatingDismissedAt) {
+      booking.clientRatingDismissedAt = now;
+    }
+    if (!booking.clientCompletionAckAt) {
+      booking.clientCompletionAckAt = now;
+    }
+    await booking.save();
+    res.status(200).json({
+      success: true,
+      clientRatingDismissedAt: booking.clientRatingDismissedAt,
+      clientCompletionAckAt: booking.clientCompletionAckAt,
     });
   } catch (err) {
     next(err);

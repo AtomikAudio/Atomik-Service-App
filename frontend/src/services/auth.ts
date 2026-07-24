@@ -19,6 +19,9 @@ export interface AuthUser {
   phone?: string;
   role: 'client' | 'technician' | 'master_technician' | 'admin';
   avatar?: string;
+  /** Technician average from client reviews (when provided by /auth/me). */
+  rating?: number;
+  ratingCount?: number;
 }
 
 interface LoginResponse {
@@ -37,6 +40,8 @@ interface ApiAuthPayload {
     phone?: string;
     role: 'client' | 'technician' | 'master_technician' | 'admin';
     avatar?: string;
+    rating?: number;
+    ratingCount?: number;
   };
   message?: string;
 }
@@ -54,6 +59,12 @@ function unwrapAuthResponse(data: ApiAuthPayload): LoginResponse {
       phone: data.user.phone,
       role: data.user.role,
       avatar: data.user.avatar,
+      rating:
+        typeof data.user.rating === 'number' ? data.user.rating : undefined,
+      ratingCount:
+        typeof data.user.ratingCount === 'number'
+          ? data.user.ratingCount
+          : undefined,
     },
   };
 }
@@ -437,6 +448,18 @@ export const authService = {
       throw new Error('Could not load profile');
     }
     return unwrapAuthResponse({ token: 'unused', user: raw.user }).user;
+  },
+
+  /** Technician rating average (from /auth/me when /reviews/me is unavailable). */
+  async getMyTechnicianRating(): Promise<{
+    rating: number;
+    ratingCount: number;
+  }> {
+    const me = await this.getCurrentUser();
+    return {
+      rating: Number(me.rating ?? 0),
+      ratingCount: Number(me.ratingCount ?? 0),
+    };
   },
 
   /**

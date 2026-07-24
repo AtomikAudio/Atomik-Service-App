@@ -60,6 +60,10 @@ export interface IBooking extends Document {
   technicianNotes?: string;
   serviceImages: string[];
   completedAt?: Date;
+  /** Client dismissed the in-app "Service completed" dialog. */
+  clientCompletionAckAt?: Date;
+  /** Client dismissed the rate-technician prompt without submitting a review. */
+  clientRatingDismissedAt?: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
   invoiceId?: mongoose.Types.ObjectId;
@@ -113,6 +117,8 @@ const bookingSchema = new Schema<IBooking>(
     technicianNotes: String,
     serviceImages: [String],
     completedAt: Date,
+    clientCompletionAckAt: Date,
+    clientRatingDismissedAt: Date,
     cancelledAt: Date,
     cancellationReason: String,
     invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },

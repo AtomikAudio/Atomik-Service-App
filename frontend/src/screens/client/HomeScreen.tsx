@@ -161,7 +161,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }, [load])
   );
 
-  useLiveRefresh(() => load(true));
+  useLiveRefresh(() => load(true), { intervalMs: 5000 });
 
   const upcomingServices = bookings.filter(
     (b) => !['completed', 'cancelled'].includes(b.status)

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Booking } from '../services/bookings';
 
 const RATED_KEY = 'atomik_rated_bookings_v1';
 const SKIPPED_KEY = 'atomik_rating_skipped_v1';
@@ -42,9 +43,30 @@ export async function markRatingSkipped(bookingId: string): Promise<boolean> {
   return true;
 }
 
-/** Prompt if completed, has technician, and not rated/skipped locally. */
-export async function shouldPromptRating(bookingId: string): Promise<boolean> {
+/**
+ * Whether to show the rate prompt.
+ * Prefer server fields on the booking (survive logout); local cache is a fallback.
+ */
+export async function shouldPromptRating(
+  bookingId: string,
+  booking?: Pick<
+    Booking,
+    'clientHasReviewed' | 'clientRatingDismissedAt'
+  > | null
+): Promise<boolean> {
+  if (booking?.clientHasReviewed) return false;
+  if (booking?.clientRatingDismissedAt) return false;
   if (await hasRatedBooking(bookingId)) return false;
   if (await hasSkippedRating(bookingId)) return false;
+  return true;
+}
+
+/** Whether to show the "Service completed" dialog (server ack preferred). */
+export function shouldShowCompletionDialog(
+  booking?: Pick<Booking, 'clientCompletionAckAt' | 'clientHasReviewed'> | null
+): boolean {
+  if (!booking) return true;
+  if (booking.clientCompletionAckAt) return false;
+  if (booking.clientHasReviewed) return false;
   return true;
 }

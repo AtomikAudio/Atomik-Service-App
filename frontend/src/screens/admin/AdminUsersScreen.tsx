@@ -18,6 +18,8 @@ import { LoadingView } from '../../components/common/LoadingView';
 import { PressableScale } from '../../components/common/PressableScale';
 import { adminService } from '../../services/admin';
 import { COLORS } from '../../constants/colors';
+import { TechRatingBadge } from '../../components/common/TechRatingBadge';
+import { formatServiceTypeLabel } from '../../utils/bookingDisplay';
 
 type UserRole = 'client' | 'technician' | 'admin';
 
@@ -28,7 +30,22 @@ interface UserRow {
   phone?: string;
   role: string;
   isActive: boolean;
+  rating?: number;
+  ratingCount?: number;
 }
+
+type TechReviewRow = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  clientName: string;
+  clientPhone: string | null;
+  venueName: string;
+  bookingCode: string | null;
+  serviceType: string | null;
+  bookingId: string;
+};
 
 const CATEGORIES: {
   role: UserRole;
@@ -63,6 +80,22 @@ const CATEGORIES: {
 const categoryMeta = (role: UserRole) =>
   CATEGORIES.find((c) => c.role === role)!;
 
+function Stars({ rating }: { rating: number }) {
+  return (
+    <View style={styles.starsRow}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Ionicons
+          key={n}
+          name={n <= rating ? 'star' : 'star-outline'}
+          size={14}
+          color={n <= rating ? COLORS.ashGray : COLORS.grayDark}
+        />
+      ))}
+      <Text style={styles.starsValue}>{rating}/5</Text>
+    </View>
+  );
+}
+
 export const AdminUsersScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { scrollBottomPadding } = useLayoutInsets();
@@ -70,6 +103,10 @@ export const AdminUsersScreen: React.FC = () => {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<UserRow | null>(null);
+  const [techReviews, setTechReviews] = useState<TechReviewRow[]>([]);
+  const [techRating, setTechRating] = useState({ rating: 0, ratingCount: 0 });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!activeRole) return;
@@ -99,6 +136,8 @@ export const AdminUsersScreen: React.FC = () => {
   const openCategory = (role: UserRole) => {
     setSearch('');
     setUsers([]);
+    setSelectedTech(null);
+    setTechReviews([]);
     setActiveRole(role);
   };
 
@@ -106,6 +145,39 @@ export const AdminUsersScreen: React.FC = () => {
     setActiveRole(null);
     setSearch('');
     setUsers([]);
+    setSelectedTech(null);
+    setTechReviews([]);
+  };
+
+  const closeTechReviews = () => {
+    setSelectedTech(null);
+    setTechReviews([]);
+    setTechRating({ rating: 0, ratingCount: 0 });
+  };
+
+  const openTechReviews = async (tech: UserRow) => {
+    setSelectedTech(tech);
+    setReviewsLoading(true);
+    setTechReviews([]);
+    setTechRating({
+      rating: tech.rating ?? 0,
+      ratingCount: tech.ratingCount ?? 0,
+    });
+    try {
+      const data = await adminService.getTechnicianReviews(tech._id);
+      setTechReviews(data.reviews);
+      setTechRating({
+        rating: data.rating,
+        ratingCount: data.ratingCount,
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Could not load technician ratings';
+      Alert.alert('Ratings', msg);
+      setSelectedTech(null);
+    } finally {
+      setReviewsLoading(false);
+    }
   };
 
   const goBackFromHub = useCallback(() => {
@@ -162,6 +234,78 @@ export const AdminUsersScreen: React.FC = () => {
     );
   }
 
+  if (selectedTech) {
+    return (
+      <Screen>
+        <Header
+          title={selectedTech.name}
+          showBack
+          onBackPress={closeTechReviews}
+        />
+        <View style={styles.techSummary}>
+          <TechRatingBadge
+            rating={techRating.rating}
+            ratingCount={techRating.ratingCount}
+          />
+          <Text style={styles.techSummaryMeta}>
+            {techRating.ratingCount > 0
+              ? `${techRating.ratingCount} client rating${
+                  techRating.ratingCount === 1 ? '' : 's'
+                }`
+              : 'No client ratings yet'}
+          </Text>
+        </View>
+        {reviewsLoading ? (
+          <LoadingView />
+        ) : (
+          <FlatList
+            data={techReviews}
+            keyExtractor={(r) => r.id}
+            contentContainerStyle={[
+              styles.list,
+              { paddingBottom: scrollBottomPadding },
+            ]}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                No ratings submitted for this technician yet.
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewTop}>
+                  <View style={styles.reviewClient}>
+                    <Text style={styles.reviewClientName} numberOfLines={1}>
+                      {item.clientName}
+                    </Text>
+                    <Text style={styles.reviewVenue} numberOfLines={2}>
+                      {item.venueName}
+                    </Text>
+                  </View>
+                  <Stars rating={item.rating} />
+                </View>
+                {(item.bookingCode || item.serviceType) && (
+                  <Text style={styles.reviewMeta}>
+                    {[
+                      item.bookingCode ? `#${item.bookingCode}` : null,
+                      item.serviceType
+                        ? formatServiceTypeLabel(item.serviceType)
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                )}
+                {item.comment ? (
+                  <Text style={styles.reviewComment}>{item.comment}</Text>
+                ) : null}
+              </View>
+            )}
+          />
+        )}
+      </Screen>
+    );
+  }
+
   const meta = categoryMeta(activeRole);
 
   return (
@@ -184,6 +328,11 @@ export const AdminUsersScreen: React.FC = () => {
           clearButtonMode="while-editing"
         />
       </View>
+      {activeRole === 'technician' ? (
+        <Text style={styles.listHint}>
+          Tap a technician to view client ratings (name, venue, score).
+        </Text>
+      ) : null}
       {loading && users.length === 0 ? (
         <LoadingView />
       ) : (
@@ -199,37 +348,69 @@ export const AdminUsersScreen: React.FC = () => {
                 : `No ${meta.title.toLowerCase()} found.`}
             </Text>
           }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.info}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.email}>{item.email}</Text>
-                {item.phone ? (
-                  <Text style={styles.phone}>{item.phone}</Text>
-                ) : null}
-                <View
-                  style={[
-                    styles.statusPill,
-                    item.isActive ? styles.statusActive : styles.statusInactive,
-                  ]}
-                >
-                  <Text
+          renderItem={({ item }) => {
+            const isTech = activeRole === 'technician';
+            const body = (
+              <>
+                <View style={styles.info}>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    {isTech ? (
+                      <TechRatingBadge
+                        rating={item.rating}
+                        ratingCount={item.ratingCount}
+                        style={styles.ratingBadge}
+                      />
+                    ) : null}
+                  </View>
+                  <Text style={styles.email}>{item.email}</Text>
+                  {item.phone ? (
+                    <Text style={styles.phone}>{item.phone}</Text>
+                  ) : null}
+                  <View
                     style={[
-                      styles.statusText,
-                      item.isActive ? styles.statusTextActive : styles.statusTextInactive,
+                      styles.statusPill,
+                      item.isActive ? styles.statusActive : styles.statusInactive,
                     ]}
                   >
-                    {item.isActive ? 'ACTIVE' : 'DISABLED'}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        item.isActive
+                          ? styles.statusTextActive
+                          : styles.statusTextInactive,
+                      ]}
+                    >
+                      {item.isActive ? 'ACTIVE' : 'DISABLED'}
+                    </Text>
+                  </View>
+                  {isTech ? (
+                    <Text style={styles.tapHint}>View ratings →</Text>
+                  ) : null}
                 </View>
-              </View>
-              <Switch
-                value={item.isActive}
-                onValueChange={() => toggle(item._id)}
-                trackColor={{ true: COLORS.red }}
-              />
-            </View>
-          )}
+                <Switch
+                  value={item.isActive}
+                  onValueChange={() => toggle(item._id)}
+                  trackColor={{ true: COLORS.red }}
+                />
+              </>
+            );
+
+            if (isTech) {
+              return (
+                <PressableScale
+                  style={styles.card}
+                  onPress={() => void openTechReviews(item)}
+                >
+                  {body}
+                </PressableScale>
+              );
+            }
+
+            return <View style={styles.card}>{body}</View>;
+          }}
         />
       )}
     </Screen>
@@ -288,7 +469,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 8,
     paddingHorizontal: 14,
     gap: 8,
   },
@@ -298,6 +479,13 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: 'Montserrat_400Regular',
     fontSize: 14,
+  },
+  listHint: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    marginHorizontal: 20,
+    marginBottom: 10,
   },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   card: {
@@ -309,10 +497,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   info: { flex: 1, paddingRight: 12 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 2,
+  },
   name: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,
     color: COLORS.white,
+    flex: 1,
+    flexShrink: 1,
+  },
+  ratingBadge: {
+    flexShrink: 0,
   },
   email: {
     fontFamily: 'Montserrat_400Regular',
@@ -342,6 +542,78 @@ const styles = StyleSheet.create({
   },
   statusTextActive: { color: COLORS.statusConfirmed },
   statusTextInactive: { color: COLORS.grayDark },
+  tapHint: {
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 11,
+    color: COLORS.ashGray,
+    marginTop: 8,
+  },
+  techSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  techSummaryMeta: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 13,
+    color: COLORS.gray,
+    flex: 1,
+  },
+  reviewCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 16,
+    marginBottom: 10,
+  },
+  reviewTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reviewClient: { flex: 1, minWidth: 0 },
+  reviewClientName: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 14,
+    color: COLORS.white,
+  },
+  reviewVenue: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  starsValue: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 12,
+    color: COLORS.ashGray,
+    marginLeft: 6,
+  },
+  reviewMeta: {
+    fontFamily: 'SpaceMono_400Regular',
+    fontSize: 9,
+    color: COLORS.grayDark,
+    letterSpacing: 0.5,
+    marginTop: 10,
+  },
+  reviewComment: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 12,
+    color: COLORS.grayLight,
+    marginTop: 8,
+    lineHeight: 18,
+  },
   empty: {
     color: COLORS.gray,
     textAlign: 'center',

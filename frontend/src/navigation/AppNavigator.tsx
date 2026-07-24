@@ -59,11 +59,13 @@ export const AppNavigator: React.FC = () => {
   }, [user?.role]);
 
   // Foreground pushes (e.g. technician assigned/dropped, status changes) refresh
-  // any focused screen live, without the user switching tabs.
+  // any focused screen live, and ClientLiveEvents polls immediately so the
+  // "Service completed" dialog appears without leaving Home.
   useEffect(() => {
     const sub = addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data as {
         bookingId?: string;
+        event?: string;
       };
       emitBookingChanged(
         data?.bookingId ? String(data.bookingId) : undefined

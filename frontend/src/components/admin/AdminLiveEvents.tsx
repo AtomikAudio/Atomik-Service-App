@@ -4,7 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NavigationContainerRef } from '@react-navigation/native';
 
 import { bookingService } from '../../services/bookings';
-import { emitBookingChanged } from '../../services/liveUpdates';
+import {
+  emitBookingChanged,
+  subscribeBookingChanged,
+} from '../../services/liveUpdates';
 import { navigateToBookingFromNotification } from '../../navigation/navigateFromNotification';
 import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
 import {
@@ -73,6 +76,7 @@ export const AdminLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => 
   const snapshotRef = useRef<Snapshot | null>(null);
   const queueRef = useRef<LiveEvent[]>([]);
   const busyRef = useRef(false);
+  const pendingPollRef = useRef(false);
   const backoffUntilRef = useRef(0);
   const [current, setCurrent] = useState<LiveEvent | null>(null);
 
@@ -93,9 +97,14 @@ export const AdminLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => 
   );
 
   const poll = useCallback(async () => {
-    if (!enabled || busyRef.current) return;
+    if (!enabled) return;
     if (Date.now() < backoffUntilRef.current) return;
+    if (busyRef.current) {
+      pendingPollRef.current = true;
+      return;
+    }
     busyRef.current = true;
+    pendingPollRef.current = false;
     try {
       const bookings = await bookingService.getAllBookings({ limit: 40 });
       const prev = snapshotRef.current;
@@ -142,6 +151,12 @@ export const AdminLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => 
       }
     } finally {
       busyRef.current = false;
+      if (pendingPollRef.current) {
+        pendingPollRef.current = false;
+        setTimeout(() => {
+          void poll();
+        }, 0);
+      }
     }
   }, [enabled, enqueue]);
 
@@ -179,6 +194,10 @@ export const AdminLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => 
       startInterval();
     })();
 
+    const unsubscribeLive = subscribeBookingChanged(() => {
+      void poll();
+    });
+
     const appStateSub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
@@ -194,6 +213,7 @@ export const AdminLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => 
     return () => {
       cancelled = true;
       stopInterval();
+      unsubscribeLive();
       appStateSub.remove();
     };
   }, [enabled, poll]);

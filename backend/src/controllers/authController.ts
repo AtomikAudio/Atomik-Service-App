@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Booking } from '../models/Booking';
+import { Review } from '../models/Review';
+import { Technician } from '../models/Technician';
 import { generateToken } from '../utils/jwt';
 import { AuthRequest } from '../middleware/auth';
 import { toE164 } from '../utils/phone';
@@ -27,6 +29,37 @@ const formatUser = (user: {
   role: user.role,
   avatar: user.avatar,
 });
+
+/** Live client-rating average for technician accounts (arithmetic mean, 2 dp). */
+async function ratingForTechnician(userId: string): Promise<{
+  rating: number;
+  ratingCount: number;
+}> {
+  const rows = await Review.aggregate<{
+    ratingCount: number;
+    ratingSum: number;
+  }>([
+    { $match: { technicianId: new mongoose.Types.ObjectId(userId) } },
+    {
+      $group: {
+        _id: null,
+        ratingCount: { $sum: 1 },
+        ratingSum: { $sum: '$rating' },
+      },
+    },
+  ]);
+  const ratingCount = rows[0]?.ratingCount ?? 0;
+  const ratingSum = rows[0]?.ratingSum ?? 0;
+  const rating =
+    ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 100) / 100 : 0;
+
+  void Technician.updateOne(
+    { userId },
+    { $set: { rating, ratingCount } }
+  ).catch(() => undefined);
+
+  return { rating, ratingCount };
+}
 
 const CLOUDINARY_AVATAR_PATTERN =
   /^https:\/\/res\.cloudinary\.com\/[a-z0-9_-]+\/image\/upload\/.+/i;
@@ -330,7 +363,15 @@ export const getMe = async (
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
-    res.status(200).json({ success: true, user: formatUser(user) });
+    const payload: Record<string, unknown> = { ...formatUser(user) };
+    if (user.role === 'technician' || user.role === 'master_technician') {
+      const { rating, ratingCount } = await ratingForTechnician(
+        user._id.toString()
+      );
+      payload.rating = rating;
+      payload.ratingCount = ratingCount;
+    }
+    res.status(200).json({ success: true, user: payload });
   } catch (err) {
     next(err);
   }

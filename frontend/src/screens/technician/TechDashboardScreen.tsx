@@ -205,7 +205,7 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
             {(
               [
                 { key: 'available', label: 'Available', count: openJobs.length },
-                { key: 'ongoing', label: 'Ongoing', count: ongoingJobs.length },
+                { key: 'ongoing', label: 'My jobs', count: ongoingJobs.length },
                 {
                   key: 'pending',
                   label: 'Pending',
@@ -296,7 +296,7 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         {!isMaster && techTab === 'ongoing' ? (
           <>
-            <Text style={styles.sectionTitle}>Ongoing Jobs</Text>
+            <Text style={styles.sectionTitle}>My jobs</Text>
             {ongoingJobs.length === 0 ? (
               <Text style={styles.empty}>No ongoing jobs assigned to you yet.</Text>
             ) : (

@@ -18,12 +18,39 @@ import { COLORS } from '../../constants/colors';
 import { logout } from '../../store/authSlice';
 import { authService } from '../../services/auth';
 import { bookingService } from '../../services/bookings';
+import { reviewService } from '../../services/reviews';
 import { venueService } from '../../services/venues';
 import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
 import { navigateProfileScreen } from '../../navigation/profileNavigation';
 import type { ProfileScreenName } from '../../navigation/profileScreens';
 import { getReadableAppVersion } from '../../utils/appCache';
 import { ThemedConfirmModal } from '../../components/common/ThemedConfirmModal';
+import { TechRatingBadge } from '../../components/common/TechRatingBadge';
+
+function formatRatingOutOfFive(rating: number, ratingCount: number): string {
+  if (ratingCount <= 0) return '—/5';
+  const avg = Math.round(rating * 100) / 100;
+  return `${avg.toFixed(2)}/5`;
+}
+
+async function loadTechnicianRating(): Promise<{
+  rating: number;
+  ratingCount: number;
+}> {
+  try {
+    const fromReviews = await reviewService.getMyRating();
+    if (fromReviews.ratingCount > 0 || fromReviews.rating > 0) {
+      return fromReviews;
+    }
+  } catch {
+    // /reviews/me may not be deployed yet — fall through to /auth/me
+  }
+  try {
+    return await authService.getMyTechnicianRating();
+  } catch {
+    return { rating: 0, ratingCount: 0 };
+  }
+}
 
 const MenuItem = ({
   icon,
@@ -61,6 +88,9 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     venues: 0,
     past: 0,
     upcoming: 0,
+    rating: 0,
+    ratingCount: 0,
+    ratingLabel: '—/5',
   });
 
   const roleLabel = (user?.role ?? 'client').toUpperCase();
@@ -72,9 +102,11 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     React.useCallback(() => {
       if (user?.role === 'admin') return;
       if (isTechnician) {
-        bookingService
-          .getMyBookings({ limit: 50 })
-          .then((bookings) => {
+        Promise.all([
+          bookingService.getMyBookings({ limit: 50 }),
+          loadTechnicianRating(),
+        ])
+          .then(([bookings, ratingInfo]) => {
             const myId = String(user?.id ?? '');
             const mine = bookings.filter(
               (b) => resolveAssignedTechnicianId(b) === myId
@@ -83,20 +115,38 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             const upcoming = mine.filter(
               (b) => !['completed', 'cancelled'].includes(b.status)
             ).length;
-            setStats({ services: past, venues: 0, past, upcoming });
+            setStats({
+              services: past,
+              venues: 0,
+              past,
+              upcoming,
+              rating: ratingInfo.rating,
+              ratingCount: ratingInfo.ratingCount,
+              ratingLabel: formatRatingOutOfFive(
+                ratingInfo.rating,
+                ratingInfo.ratingCount
+              ),
+            });
           })
           .catch(() => {});
         return;
       }
       Promise.all([bookingService.getMyBookings(), venueService.getMyVenues()])
-        .then(([b, v]) =>
+        .then(([b, v]) => {
+          const upcoming = b.filter(
+            (x) => !['completed', 'cancelled'].includes(x.status)
+          ).length;
+          const completed = b.filter((x) => x.status === 'completed').length;
           setStats({
             services: b.length,
             venues: v.length,
-            past: 0,
-            upcoming: 0,
-          })
-        )
+            past: completed,
+            upcoming,
+            rating: 0,
+            ratingCount: 0,
+            ratingLabel: '—/5',
+          });
+        })
         .catch(() => {});
     }, [user?.role, user?.id, isTechnician])
   );
@@ -112,7 +162,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     goTo('SavedVenues');
   };
 
-  const openPastServices = () => {
+  /** Technician past jobs list */
+  const openTechPastServices = () => {
     let parent = navigation.getParent?.();
     while (parent) {
       const names = parent.getState?.()?.routeNames ?? [];
@@ -139,6 +190,32 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       parent = parent.getParent?.();
     }
     navigation.navigate('Jobs', { screen: 'TechDashboard' });
+  };
+
+  /** Client: upcoming bookings list (Account stack or Home stack). */
+  const openClientUpcoming = () => {
+    if (navigation.getState?.()?.routeNames?.includes('UpcomingServices')) {
+      navigation.navigate('UpcomingServices');
+      return;
+    }
+    navigation.getParent()?.navigate('Home', { screen: 'UpcomingServices' });
+  };
+
+  /** Client: completed / past services list. */
+  const openClientCompleted = (asPast = false) => {
+    const params = asPast ? { title: 'Past Services' } : undefined;
+    if (asPast && navigation.getState?.()?.routeNames?.includes('PastServices')) {
+      navigation.navigate('PastServices', params);
+      return;
+    }
+    if (navigation.getState?.()?.routeNames?.includes('CompletedServices')) {
+      navigation.navigate('CompletedServices', params);
+      return;
+    }
+    navigation.getParent()?.navigate('Home', {
+      screen: 'CompletedServices',
+      params,
+    });
   };
 
   const handleLogout = () => setLogoutOpen(true);
@@ -176,6 +253,23 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
           <Text style={styles.userRole}>{roleLabel}</Text>
+          {isTechnician ? (
+            <View style={styles.ratingHero}>
+              <TechRatingBadge
+                rating={stats.rating}
+                ratingCount={stats.ratingCount}
+                style={styles.ratingHeroBadge}
+              />
+              {stats.ratingCount > 0 ? (
+                <Text style={styles.ratingHeroMeta}>
+                  {stats.ratingCount} client
+                  {stats.ratingCount === 1 ? ' rating' : ' ratings'}
+                </Text>
+              ) : (
+                <Text style={styles.ratingHeroMeta}>No client ratings yet</Text>
+              )}
+            </View>
+          ) : null}
         </View>
 
         {/* Stats */}
@@ -184,17 +278,24 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             <>
               <TouchableOpacity
                 style={styles.statItem}
-                onPress={openPastServices}
+                onPress={openTechPastServices}
                 activeOpacity={0.7}
               >
-                <Text style={styles.statNum}>{stats.past}</Text>
                 <Text
-                  style={styles.statLabelWide}
+                  style={styles.statNum}
                   numberOfLines={1}
                   adjustsFontSizeToFit
-                  minimumFontScale={0.8}
+                  minimumFontScale={0.75}
                 >
-                  Past Services
+                  {stats.past}
+                </Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  Past{'\n'}Services
                 </Text>
               </TouchableOpacity>
               <View style={styles.statDivider} />
@@ -203,41 +304,125 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                 onPress={openUpcomingJobs}
                 activeOpacity={0.7}
               >
-                <Text style={styles.statNum}>{stats.upcoming}</Text>
+                <Text
+                  style={styles.statNum}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {stats.upcoming}
+                </Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  Upcoming{'\n'}Services
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text
+                  style={styles.statNumRating}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.65}
+                >
+                  {stats.ratingLabel}
+                </Text>
                 <Text
                   style={styles.statLabelWide}
                   numberOfLines={1}
                   adjustsFontSizeToFit
-                  minimumFontScale={0.8}
+                  minimumFontScale={0.75}
                 >
-                  Upcoming Services
+                  Ratings
                 </Text>
-              </TouchableOpacity>
+              </View>
             </>
-          ) : (
+          ) : isAdmin ? (
             <>
               <View style={styles.statItem}>
                 <Text style={styles.statNum}>{stats.services}</Text>
                 <Text style={styles.statLabel}>Services</Text>
               </View>
-              {!isAdmin && (
-                <>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statNum}>{stats.venues}</Text>
-                    <Text style={styles.statLabel}>Venues</Text>
-                  </View>
-                </>
-              )}
-              {isAdmin && (
-                <>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statNum}>{roleLabel}</Text>
-                    <Text style={styles.statLabel}>Access</Text>
-                  </View>
-                </>
-              )}
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{roleLabel}</Text>
+                <Text style={styles.statLabel}>Access</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={openClientUpcoming}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={styles.statNum}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {stats.upcoming}
+                </Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  Upcoming{'\n'}Services
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.statDivider} />
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={() => openClientCompleted(false)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={styles.statNum}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {stats.past}
+                </Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  Completed{'\n'}Services
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.statDivider} />
+              <TouchableOpacity
+                style={styles.statItem}
+                onPress={openSavedVenues}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={styles.statNum}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {stats.venues}
+                </Text>
+                <Text
+                  style={styles.statLabelWide}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  Venues
+                </Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -254,14 +439,26 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             <MenuItem
               icon="time-outline"
               label="Past Services"
-              onPress={openPastServices}
+              onPress={openTechPastServices}
             />
           ) : (
-            <MenuItem
-              icon="location-outline"
-              label={isAdmin ? 'Manage Venues' : 'Saved Venues'}
-              onPress={openSavedVenues}
-            />
+            <>
+              {!isAdmin ? (
+                <>
+                  <MenuItem
+                    icon="checkmark-done-outline"
+                    label="Past Services"
+                    onPress={() => openClientCompleted(true)}
+                  />
+                  <View style={styles.menuDivider} />
+                </>
+              ) : null}
+              <MenuItem
+                icon="location-outline"
+                label={isAdmin ? 'Manage Venues' : 'Saved Venues'}
+                onPress={openSavedVenues}
+              />
+            </>
           )}
           <View style={styles.menuDivider} />
           <MenuItem
@@ -375,6 +572,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(142,48,47,0.25)',
   },
+  ratingHero: {
+    marginTop: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  ratingHeroBadge: {
+    alignItems: 'center',
+    minWidth: 96,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  ratingHeroMeta: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 11,
+    color: COLORS.gray,
+  },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
@@ -398,6 +611,13 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginBottom: 4,
   },
+  statNumRating: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 18,
+    color: COLORS.white,
+    marginBottom: 4,
+    paddingHorizontal: 2,
+  },
   statLabel: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 11,
@@ -405,10 +625,10 @@ const styles = StyleSheet.create({
   },
   statLabelWide: {
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.gray,
     textAlign: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   menuCard: {
     overflow: 'hidden',

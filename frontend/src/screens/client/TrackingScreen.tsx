@@ -74,16 +74,20 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
 
         let prompt = false;
         if (b.status === 'completed' && getTechnicianFromBooking(b)) {
-          if (await shouldPromptRating(b._id)) {
-            try {
-              const { reviewed } = await reviewService.getForBooking(b._id);
-              if (reviewed) {
-                await markBookingRated(b._id);
-              } else {
+          if (await shouldPromptRating(b._id, b)) {
+            if (b.clientHasReviewed) {
+              await markBookingRated(b._id);
+            } else {
+              try {
+                const { reviewed } = await reviewService.getForBooking(b._id);
+                if (reviewed) {
+                  await markBookingRated(b._id);
+                } else {
+                  prompt = true;
+                }
+              } catch {
                 prompt = true;
               }
-            } catch {
-              prompt = true;
             }
           }
         }
@@ -284,6 +288,7 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
           void (async () => {
             if (!(await hasRatedBooking(booking._id))) {
               await markRatingSkipped(booking._id);
+              void bookingService.dismissRatingPrompt(booking._id).catch(() => {});
             }
             setRateOpen(false);
           })();

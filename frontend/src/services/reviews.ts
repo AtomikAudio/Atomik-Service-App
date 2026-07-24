@@ -22,6 +22,18 @@ export const reviewService = {
     };
   },
 
+  /** Technician's average client rating (arithmetic mean, 2 decimals). */
+  async getMyRating(): Promise<{ rating: number; ratingCount: number }> {
+    const res = (await api.get('/reviews/me')) as {
+      rating?: number;
+      ratingCount?: number;
+    };
+    return {
+      rating: Number(res.rating ?? 0),
+      ratingCount: Number(res.ratingCount ?? 0),
+    };
+  },
+
   async submit(
     bookingId: string,
     rating: number,

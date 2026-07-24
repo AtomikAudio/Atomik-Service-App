@@ -102,17 +102,36 @@ export const createReview = async (
       tags: [],
     });
 
-    const profile = await Technician.findOne({ userId: techUserId });
-    if (profile) {
-      const prevCount = profile.ratingCount ?? 0;
-      const prevAvg = profile.rating ?? 0;
-      const nextCount = prevCount + 1;
-      const nextAvg =
-        Math.round(((prevAvg * prevCount + rating) / nextCount) * 100) / 100;
-      profile.ratingCount = nextCount;
-      profile.rating = nextAvg;
-      await profile.save();
-    }
+    // Mark prompts handled so they never reappear after re-login.
+    await Booking.updateOne(
+      { _id: bookingId },
+      { $set: { clientCompletionAckAt: new Date() } }
+    ).catch(() => undefined);
+
+    // Recompute technician average from all reviews (source of truth).
+    const agg = await Review.aggregate<{
+      ratingCount: number;
+      ratingSum: number;
+    }>([
+      { $match: { technicianId: new mongoose.Types.ObjectId(techUserId) } },
+      {
+        $group: {
+          _id: null,
+          ratingCount: { $sum: 1 },
+          ratingSum: { $sum: '$rating' },
+        },
+      },
+    ]);
+    const ratingCount = agg[0]?.ratingCount ?? 0;
+    const ratingSum = agg[0]?.ratingSum ?? 0;
+    const nextAvg =
+      ratingCount > 0
+        ? Math.round((ratingSum / ratingCount) * 100) / 100
+        : 0;
+    await Technician.updateOne(
+      { userId: techUserId },
+      { $set: { rating: nextAvg, ratingCount } }
+    ).catch(() => undefined);
 
     res.status(201).json({
       success: true,
@@ -157,6 +176,156 @@ export const getReviewForBooking = async (
             createdAt: review.createdAt,
           }
         : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Logged-in technician's average client rating.
+ * Formula: arithmetic mean of all 1–5 star reviews, rounded to 2 decimals.
+ */
+export const getMyRating = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const techId = req.user!.id;
+    const rows = await Review.aggregate<{
+      ratingCount: number;
+      ratingSum: number;
+    }>([
+      { $match: { technicianId: new mongoose.Types.ObjectId(techId) } },
+      {
+        $group: {
+          _id: null,
+          ratingCount: { $sum: 1 },
+          ratingSum: { $sum: '$rating' },
+        },
+      },
+    ]);
+
+    const ratingCount = rows[0]?.ratingCount ?? 0;
+    const ratingSum = rows[0]?.ratingSum ?? 0;
+    const average =
+      ratingCount > 0
+        ? Math.round((ratingSum / ratingCount) * 100) / 100
+        : 0;
+
+    // Keep Technician profile cache in sync with live aggregate.
+    await Technician.updateOne(
+      { userId: techId },
+      { $set: { rating: average, ratingCount } }
+    ).catch(() => undefined);
+
+    res.status(200).json({
+      success: true,
+      rating: average,
+      ratingCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Admin: all client ratings for one technician
+ * (client name, venue, stars, booking ref).
+ */
+export const getTechnicianReviewsForAdmin = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const technicianId = toObjectId(req.params.technicianId);
+    const tech = await User.findById(technicianId).select('name role email phone');
+    if (!tech) {
+      res.status(404).json({ success: false, message: 'Technician not found' });
+      return;
+    }
+    if (
+      tech.role !== 'technician' &&
+      tech.role !== 'master_technician'
+    ) {
+      res.status(400).json({
+        success: false,
+        message: 'User is not a technician',
+      });
+      return;
+    }
+
+    const reviews = await Review.find({ technicianId })
+      .sort({ createdAt: -1 })
+      .populate('clientId', 'name phone email')
+      .populate({
+        path: 'bookingId',
+        select: 'bookingId serviceType scheduledDate scheduledTime venueId',
+        populate: { path: 'venueId', select: 'name area city' },
+      })
+      .lean();
+
+    const ratingCount = reviews.length;
+    const ratingSum = reviews.reduce((sum, r) => sum + (r.rating ?? 0), 0);
+    const average =
+      ratingCount > 0
+        ? Math.round((ratingSum / ratingCount) * 100) / 100
+        : 0;
+
+    res.status(200).json({
+      success: true,
+      technician: {
+        id: tech._id.toString(),
+        name: tech.name,
+        email: tech.email ?? '',
+        phone: tech.phone ?? '',
+        role: tech.role,
+      },
+      rating: average,
+      ratingCount,
+      reviews: reviews.map((r) => {
+        const client =
+          r.clientId && typeof r.clientId === 'object'
+            ? (r.clientId as { name?: string; phone?: string; email?: string })
+            : null;
+        const booking =
+          r.bookingId && typeof r.bookingId === 'object'
+            ? (r.bookingId as {
+                bookingId?: string;
+                serviceType?: string;
+                scheduledDate?: Date;
+                scheduledTime?: string;
+                venueId?:
+                  | { name?: string; area?: string; city?: string }
+                  | string;
+              })
+            : null;
+        const venue =
+          booking?.venueId && typeof booking.venueId === 'object'
+            ? booking.venueId
+            : null;
+        const venueLabel = venue
+          ? [venue.name, venue.area || venue.city].filter(Boolean).join(' · ')
+          : 'Venue unavailable';
+
+        return {
+          id: String(r._id),
+          rating: r.rating,
+          comment: r.comment ?? null,
+          createdAt: r.createdAt,
+          clientName: client?.name?.trim() || 'Client',
+          clientPhone: client?.phone ?? null,
+          venueName: venueLabel,
+          bookingCode: booking?.bookingId ?? null,
+          serviceType: booking?.serviceType ?? null,
+          bookingId:
+            booking && (booking as { _id?: unknown })._id != null
+              ? String((booking as { _id: unknown })._id)
+              : String(r.bookingId),
+        };
+      }),
     });
   } catch (err) {
     next(err);

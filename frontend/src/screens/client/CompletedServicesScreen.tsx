@@ -19,9 +19,14 @@ import { COLORS } from '../../constants/colors';
 
 interface Props {
   navigation: any;
+  route?: { params?: { title?: string } };
 }
 
-export const CompletedServicesScreen: React.FC<Props> = ({ navigation }) => {
+export const CompletedServicesScreen: React.FC<Props> = ({
+  navigation,
+  route,
+}) => {
+  const title = route?.params?.title?.trim() || 'Completed Services';
   const [items, setItems] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,7 +56,7 @@ export const CompletedServicesScreen: React.FC<Props> = ({ navigation }) => {
   if (loading) {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
-        <Header showBack title="Completed Services" />
+        <Header showBack title={title} />
         <LoadingView />
       </Screen>
     );
@@ -60,7 +65,7 @@ export const CompletedServicesScreen: React.FC<Props> = ({ navigation }) => {
   if (error) {
     return (
       <Screen edges={['left', 'right', 'bottom']}>
-        <Header showBack title="Completed Services" />
+        <Header showBack title={title} />
         <ErrorView message={error} onRetry={load} />
       </Screen>
     );
@@ -68,7 +73,7 @@ export const CompletedServicesScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <Screen edges={['left', 'right', 'bottom']}>
-      <Header showBack title="Completed Services" />
+      <Header showBack title={title} />
       <FlatList
         data={items}
         style={styles.list}
@@ -77,7 +82,7 @@ export const CompletedServicesScreen: React.FC<Props> = ({ navigation }) => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="checkmark-done-outline" size={48} color={COLORS.grayDark} />
-            <Text style={styles.emptyText}>Go ahead and place a service now</Text>
+            <Text style={styles.emptyText}>No completed services yet</Text>
           </View>
         }
         renderItem={({ item }) => (

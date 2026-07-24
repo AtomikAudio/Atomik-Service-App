@@ -82,6 +82,13 @@ export interface Booking {
   serviceImages?: string[];
   rejectedBy?: (string | { _id: string })[];
   reschedule?: BookingReschedule;
+  completedAt?: string;
+  /** Server: client dismissed "Service completed" (show once). */
+  clientCompletionAckAt?: string | null;
+  /** Server: client dismissed rate prompt without rating. */
+  clientRatingDismissedAt?: string | null;
+  /** Server: a Review already exists for this booking. */
+  clientHasReviewed?: boolean;
 }
 
 export const bookingService = {
@@ -197,6 +204,16 @@ export const bookingService = {
   async getBookingById(id: string) {
     const res = (await api.get(`/bookings/${id}`)) as { booking: Booking };
     return res.booking;
+  },
+
+  /** Persist that the client saw the "Service completed" dialog (once). */
+  async acknowledgeCompletion(bookingId: string): Promise<void> {
+    await api.patch(`/bookings/${bookingId}/ack-completion`);
+  },
+
+  /** Persist that the client dismissed the rate prompt without submitting. */
+  async dismissRatingPrompt(bookingId: string): Promise<void> {
+    await api.patch(`/bookings/${bookingId}/dismiss-rating`);
   },
 
   async cancelBooking(id: string, reason?: string) {
