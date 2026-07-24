@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { AddressAutofillSearch } from '../../../components/common/AddressAutofillSearch';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import { Input } from '../../../components/common/Input';
 import { Button } from '../../../components/common/Button';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { venueService, Venue } from '../../../services/venues';
 import { COLORS } from '../../../constants/colors';
+import type { ParsedAddress } from '../../../services/placesAutocomplete';
 
 const ADDRESS_LABELS = ['Home', 'Office', 'Venue', 'Other'];
 
@@ -106,6 +108,16 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const applyAutofill = (address: ParsedAddress) => {
+    setLine1(address.line1);
+    setLine2(address.line2);
+    setLocality(address.locality);
+    setCity(address.city || 'Bengaluru');
+    setState(address.state || 'Karnataka');
+    if (address.pincode) setPincode(address.pincode);
+    setErrors({});
+  };
+
   return (
     <View style={styles.container}>
       <BookingFlowHeader
@@ -163,12 +175,16 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
 
           <Text style={styles.sectionLabel}>DELIVERY ADDRESS</Text>
 
+          <AddressAutofillSearch onSelect={applyAutofill} />
+
           <Input
             label="Address line 1"
             placeholder="Flat / House no., Building name"
             value={line1}
             onChangeText={setLine1}
             autoCapitalize="words"
+            autoComplete="address-line1"
+            textContentType="streetAddressLine1"
             error={errors.line1}
           />
           <Input
@@ -177,6 +193,8 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             value={line2}
             onChangeText={setLine2}
             autoCapitalize="words"
+            autoComplete="address-line2"
+            textContentType="streetAddressLine2"
           />
           <Input
             label="Area / Locality"
@@ -184,6 +202,7 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             value={locality}
             onChangeText={setLocality}
             autoCapitalize="words"
+            textContentType="sublocality"
             error={errors.locality}
           />
           <Input
@@ -199,6 +218,8 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             value={city}
             onChangeText={setCity}
             autoCapitalize="words"
+            autoComplete="postal-address"
+            textContentType="addressCity"
             error={errors.city}
           />
           <Input
@@ -207,6 +228,7 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             value={state}
             onChangeText={setState}
             autoCapitalize="words"
+            textContentType="addressState"
             error={errors.state}
           />
           <Input
@@ -215,6 +237,8 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             value={pincode}
             onChangeText={(t) => setPincode(t.replace(/\D/g, '').slice(0, 6))}
             keyboardType="numeric"
+            autoComplete="postal-code"
+            textContentType="postalCode"
             error={errors.pincode}
           />
 
@@ -223,6 +247,7 @@ export const SelectLocationScreen: React.FC<Props> = ({ navigation }) => {
             onPress={saveAddress}
             loading={saving}
             style={styles.saveBtn}
+            textStyle={styles.saveBtnText}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -267,7 +292,11 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: COLORS.white,
   },
-  saveBtn: { marginTop: 8, marginBottom: 8 },
+  saveBtn: { marginTop: 8, marginBottom: 8, borderRadius: 6 },
+  saveBtnText: {
+    fontFamily: 'Montserrat_700Bold',
+    letterSpacing: 2,
+  },
   savedHeader: { marginBottom: 16 },
   savedRow: {
     paddingVertical: 14,

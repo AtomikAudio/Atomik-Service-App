@@ -98,7 +98,7 @@ export const SavedVenuesScreen: React.FC<Props> = ({ navigation }) => {
             accessibilityRole="button"
             accessibilityLabel="Add address"
           >
-            <Ionicons name="add-circle-outline" size={20} color={COLORS.red} />
+            <Ionicons name="add-circle-outline" size={20} color={COLORS.white} />
             <Text style={styles.addBtnText}>ADD ADDRESS</Text>
           </TouchableOpacity>
         </View>
@@ -124,20 +124,20 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   addBtn: {
+    alignSelf: 'stretch',
+    height: 52,
     flexDirection: 'row',
+    gap: 8,
+    backgroundColor: COLORS.red,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: COLORS.redMuted,
   },
   addBtnText: {
-    fontFamily: 'Montserrat_600SemiBold',
-    fontSize: 11,
-    color: COLORS.red,
-    letterSpacing: 1,
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 13,
+    color: COLORS.white,
+    letterSpacing: 2,
   },
   card: { marginBottom: 10 },
   row: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },

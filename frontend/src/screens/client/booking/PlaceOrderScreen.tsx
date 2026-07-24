@@ -275,11 +275,13 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         ) : (
-          <OrderActionRow
-            icon="location-outline"
-            label="Add address"
+          <TouchableOpacity
+            style={styles.addAddressBtn}
             onPress={() => navigation.navigate('SelectLocation')}
-          />
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addAddressBtnText}>ADD ADDRESS</Text>
+          </TouchableOpacity>
         )}
 
         <OrderActionRow
@@ -483,6 +485,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     lineHeight: 16,
+  },
+  addAddressBtn: {
+    height: 52,
+    backgroundColor: COLORS.red,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  addAddressBtnText: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 13,
+    color: COLORS.white,
+    letterSpacing: 2,
   },
   changeLink: {
     fontFamily: 'Montserrat_500Medium',

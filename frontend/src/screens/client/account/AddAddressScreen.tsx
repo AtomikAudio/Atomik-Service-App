@@ -7,10 +7,12 @@ import {
   Alert,
 } from 'react-native';
 import { AccountScreenLayout } from '../../../components/common/AccountScreenLayout';
+import { AddressAutofillSearch } from '../../../components/common/AddressAutofillSearch';
 import { Input } from '../../../components/common/Input';
 import { Button } from '../../../components/common/Button';
 import { venueService, Venue } from '../../../services/venues';
 import { COLORS } from '../../../constants/colors';
+import type { ParsedAddress } from '../../../services/placesAutocomplete';
 
 const ADDRESS_LABELS = ['Home', 'Office', 'Venue', 'Other'];
 
@@ -82,6 +84,16 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const applyAutofill = (address: ParsedAddress) => {
+    setLine1(address.line1);
+    setLine2(address.line2);
+    setLocality(address.locality);
+    setCity(address.city || 'Bengaluru');
+    setState(address.state || 'Karnataka');
+    if (address.pincode) setPincode(address.pincode);
+    setErrors({});
+  };
+
   return (
     <AccountScreenLayout title={editing ? 'Edit address' : 'Add address'} keyboard>
       <Text style={styles.sectionLabel}>SAVE AS</Text>
@@ -106,12 +118,16 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
 
       <Text style={styles.sectionLabel}>ADDRESS</Text>
 
+      <AddressAutofillSearch onSelect={applyAutofill} />
+
       <Input
         label="Address line 1"
         placeholder="Flat / House no., Building name"
         value={line1}
         onChangeText={setLine1}
         autoCapitalize="words"
+        autoComplete="address-line1"
+        textContentType="streetAddressLine1"
         error={errors.line1}
       />
       <Input
@@ -120,6 +136,8 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         value={line2}
         onChangeText={setLine2}
         autoCapitalize="words"
+        autoComplete="address-line2"
+        textContentType="streetAddressLine2"
       />
       <Input
         label="Area / Locality"
@@ -127,6 +145,7 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         value={locality}
         onChangeText={setLocality}
         autoCapitalize="words"
+        textContentType="sublocality"
         error={errors.locality}
       />
       <Input
@@ -142,6 +161,8 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         value={city}
         onChangeText={setCity}
         autoCapitalize="words"
+        autoComplete="postal-address"
+        textContentType="addressCity"
         error={errors.city}
       />
       <Input
@@ -150,6 +171,7 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         value={state}
         onChangeText={setState}
         autoCapitalize="words"
+        textContentType="addressState"
         error={errors.state}
       />
       <Input
@@ -158,6 +180,8 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         value={pincode}
         onChangeText={(t) => setPincode(t.replace(/\D/g, '').slice(0, 6))}
         keyboardType="numeric"
+        autoComplete="postal-code"
+        textContentType="postalCode"
         error={errors.pincode}
       />
 
@@ -166,6 +190,7 @@ export const AddAddressScreen: React.FC<Props> = ({ navigation, route }) => {
         onPress={saveAddress}
         loading={saving}
         style={styles.saveBtn}
+        textStyle={styles.saveBtnText}
       />
     </AccountScreenLayout>
   );
@@ -206,5 +231,9 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: COLORS.white,
   },
-  saveBtn: { marginTop: 8, marginBottom: 24 },
+  saveBtn: { marginTop: 8, marginBottom: 24, borderRadius: 6 },
+  saveBtnText: {
+    fontFamily: 'Montserrat_700Bold',
+    letterSpacing: 2,
+  },
 });

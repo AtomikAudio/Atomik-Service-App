@@ -30,6 +30,23 @@ interface InputProps {
   onRightIconPress?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /** Platform autofill hint (iOS/Android saved addresses). */
+  autoComplete?:
+    | 'off'
+    | 'street-address'
+    | 'postal-address'
+    | 'postal-code'
+    | 'address-line1'
+    | 'address-line2';
+  textContentType?:
+    | 'none'
+    | 'fullStreetAddress'
+    | 'streetAddressLine1'
+    | 'streetAddressLine2'
+    | 'addressCity'
+    | 'addressState'
+    | 'postalCode'
+    | 'sublocality';
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -50,6 +67,8 @@ export const Input: React.FC<InputProps> = ({
   onRightIconPress,
   onFocus,
   onBlur,
+  autoComplete,
+  textContentType,
 }) => {
   const [focused, setFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -139,6 +158,8 @@ export const Input: React.FC<InputProps> = ({
               onBlur?.();
             }}
             selectionColor={COLORS.red}
+            autoComplete={autoComplete}
+            textContentType={textContentType}
           />
           {secureTextEntry && (
             <TouchableOpacity
