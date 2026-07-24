@@ -491,13 +491,16 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           {isExtraParts ? 'Pay extra parts' : 'Payment'}
         </Text>
         {!isExtraParts ? (
-          <View style={styles.confirmNotice}>
-            <Text style={styles.confirmNoticeTitle}>Payment required</Text>
-            <Text style={styles.confirmNoticeBody}>
-              Complete payment to confirm your booking. Technicians are assigned
-              only after payment is successful.
-            </Text>
-          </View>
+          <>
+            <NoRefundPolicyNote style={styles.payPolicyNote} />
+            <View style={styles.confirmNotice}>
+              <Text style={styles.confirmNoticeTitle}>Payment required</Text>
+              <Text style={styles.confirmNoticeBody}>
+                Complete payment to confirm your booking. Technicians are assigned
+                only after payment is successful.
+              </Text>
+            </View>
+          </>
         ) : null}
         <View style={styles.bookingCard}>
           <Text style={styles.bookingService}>{serviceLabel}</Text>
@@ -688,7 +691,6 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         ) : null}
         </ScrollView>
         <View style={styles.footer}>
-          <NoRefundPolicyNote style={styles.payPolicyNote} />
           <Button
             label={
               process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID?.includes('your_key')
@@ -961,7 +963,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
   payPolicyNote: {
-    marginBottom: 2,
+    marginBottom: 12,
   },
   cancelBtn: {
     marginTop: 0,

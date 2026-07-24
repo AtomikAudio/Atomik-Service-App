@@ -28,7 +28,14 @@ export const NoRefundPolicyNote: React.FC<Props> = ({
   return (
     <View style={[styles.wrap, style]}>
       <Text style={styles.title}>{NO_REFUND_POLICY_TITLE}</Text>
-      <Text style={styles.body}>{NO_REFUND_POLICY_BODY}</Text>
+      <Text
+        style={styles.body}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.82}
+      >
+        {NO_REFUND_POLICY_BODY}
+      </Text>
     </View>
   );
 };
@@ -38,7 +45,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 4,
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.ashGrayBorder,
@@ -55,10 +62,10 @@ const styles = StyleSheet.create({
   },
   body: {
     fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.gray,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   compact: {
     fontFamily: 'Montserrat_400Regular',
