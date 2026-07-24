@@ -12,8 +12,6 @@ import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader
 import { ThemedConfirmModal } from '../../../components/common/ThemedConfirmModal';
 import {
   EXTRA_PARTS_CHARGE_NOTE,
-  GENERAL_SERVICE_PRICE,
-  GENERAL_VISIT_PRICE,
   SERVICE_GROUPS,
 } from '../../../constants/audioServices';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
@@ -186,24 +184,14 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
               <Text style={styles.cardTitle}>{group.label}</Text>
               <Text style={styles.cardDesc}>{group.description}</Text>
               {group.id === 'general-service' ? (
-                <>
-                  <Text style={styles.cardMeta}>
-                    {GENERAL_SERVICE_PRICE} + GST
-                  </Text>
-                  <Text style={styles.cardMeta}>
-                    Tuning · Amplifier Rack · Damage Check
-                  </Text>
-                </>
+                <Text style={styles.cardMeta}>
+                  Tuning · Amplifier Rack · Damage Check
+                </Text>
               ) : null}
               {group.id === 'general-visit' ? (
-                <>
-                  <Text style={styles.cardMeta}>
-                    {GENERAL_VISIT_PRICE} + GST
-                  </Text>
-                  <Text style={styles.cardMeta}>
-                    Assessment · Diagnostics · Recommendations
-                  </Text>
-                </>
+                <Text style={styles.cardMeta}>
+                  Assessment · Diagnostics · Recommendations
+                </Text>
               ) : null}
             </View>
             <Ionicons
