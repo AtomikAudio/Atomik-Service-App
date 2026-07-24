@@ -30,12 +30,15 @@ export const notifyClientBooking = async (
     title: string;
     body: string;
     type?: 'info' | 'success' | 'warning' | 'error';
+    /** Optional event key for clients (e.g. service_completed, rate_technician). */
+    event?: string;
   }
 ): Promise<void> => {
   const userId = resolveUserId(booking.clientId);
   if (!userId) return;
 
-  const data = { bookingId: booking._id };
+  const data: Record<string, unknown> = { bookingId: booking._id };
+  if (payload.event) data.event = payload.event;
 
   await Notification.create({
     userId,

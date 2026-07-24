@@ -1,10 +1,12 @@
 import { Response, NextFunction } from 'express';
+import { Readable } from 'stream';
 import { Booking } from '../models/Booking';
 import { Invoice } from '../models/Invoice';
 import { Notification } from '../models/Notification';
 import { User } from '../models/User';
 import { AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+import cloudinary from '../config/cloudinary';
 import { notifyByRoles } from '../utils/notifyUsers';
 import {
   formatStatusLabel,
@@ -18,6 +20,7 @@ import {
   resolveTechnicianId,
 } from '../utils/bookingAssignment';
 import { parseScheduledDate, normalizeScheduledTime, formatDateIST } from '../utils/schedule';
+import { resolveInvoiceCharges } from '../config/pricing';
 import {
   redactBookingForPoolView,
   serializeBookingForRole,
@@ -31,6 +34,7 @@ import {
 } from '../utils/bookingPayment';
 import { parseBookingStatus, parsePagination, toObjectId } from '../utils/mongoQuery';
 import { Venue } from '../models/Venue';
+import { Technician } from '../models/Technician';
 import {
   assertValidHoldForBooking,
   consumeHold,
@@ -95,23 +99,19 @@ export const createBooking = async (
       ],
     });
 
-    // Create invoice
-    const serviceCharges = serviceType === 'emergency' ? 9000 : 6500;
-    const technicianCharges = 2500;
-    const spareParts = 0;
-    const subtotal = serviceCharges + technicianCharges + spareParts;
-    const taxAmount = Math.round(subtotal * 0.18);
-    const totalAmount = subtotal + taxAmount;
+    // Create invoice from canonical pricing (pre-tax + 18% GST)
+    const charges = resolveInvoiceCharges(String(serviceType));
 
     const invoice = await Invoice.create({
       invoiceNumber: generateInvoiceNumber(),
       bookingId: booking._id,
       clientId: req.user!.id,
-      serviceCharges,
-      technicianCharges,
-      spareParts,
-      taxAmount,
-      totalAmount,
+      serviceCharges: charges.serviceCharges,
+      technicianCharges: charges.technicianCharges,
+      spareParts: charges.spareParts,
+      taxRate: charges.taxRate,
+      taxAmount: charges.taxAmount,
+      totalAmount: charges.totalAmount,
       dueDate: parsedDate,
     });
 
@@ -378,6 +378,8 @@ export const updateBookingStatus = async (
       updates.cancellationReason = notes;
     }
 
+    const wasAlreadyCompleted = booking.status === 'completed';
+
     let updated = await Booking.findByIdAndUpdate(bookingId, updates, {
       new: true,
     })
@@ -415,26 +417,60 @@ export const updateBookingStatus = async (
     }
 
     if (updated) {
-      const statusLabel = formatStatusLabel(status);
       let techLabel = 'Your technician';
+      let techName = 'Technician';
 
-      if (req.user!.role === 'technician') {
+      if (req.user!.role === 'technician' || req.user!.role === 'master_technician') {
         const tech = await User.findById(req.user!.id).select('name phone');
         techLabel = technicianContactLabel(tech);
+        techName = tech?.name?.trim() || 'Technician';
       } else if (updated.technicianId) {
-        techLabel = technicianContactLabel(
-          updated.technicianId as { name?: string; phone?: string }
-        );
+        const techRef = updated.technicianId as { name?: string; phone?: string };
+        techLabel = technicianContactLabel(techRef);
+        techName = techRef.name?.trim() || 'Technician';
       }
 
-      const noteSuffix = notes?.trim() ? ` Note: ${notes.trim()}` : '';
+      if (status === 'completed' && !wasAlreadyCompleted) {
+        const techOid = resolveTechnicianId(updated);
+        if (techOid) {
+          await Technician.updateOne(
+            { userId: techOid },
+            { $inc: { totalJobsCompleted: 1 } }
+          );
+        }
 
-      await notifyClientBooking(booking, {
-        title: `Service ${statusLabel}`,
-        body: `${techLabel} updated booking ${booking.bookingId} to ${statusLabel}.${noteSuffix}`,
-        type: status === 'completed' ? 'success' : 'info',
-      });
+        await notifyClientBooking(booking, {
+          title: 'Service completed',
+          body: `Your booking ${booking.bookingId} has been completed by ${techName}.`,
+          type: 'success',
+          event: 'service_completed',
+        });
+        await notifyClientBooking(booking, {
+          title: 'Rate your service',
+          body: `How was your experience with ${techName}? Tap to rate.`,
+          type: 'info',
+          event: 'rate_technician',
+        });
+        await notifyByRoles(['admin'], {
+          title: 'Service completed',
+          body: `Booking ${booking.bookingId} was completed by ${techName}.`,
+          type: 'success',
+          category: 'booking',
+          data: {
+            bookingId: String(updated._id),
+            event: 'service_completed',
+          },
+        });
+      } else if (!(status === 'completed' && wasAlreadyCompleted)) {
+        const statusLabel = formatStatusLabel(status);
+        const noteSuffix = notes?.trim() ? ` Note: ${notes.trim()}` : '';
 
+        await notifyClientBooking(booking, {
+          title: `Service ${statusLabel}`,
+          body: `${techLabel} updated booking ${booking.bookingId} to ${statusLabel}.${noteSuffix}`,
+          type: 'info',
+        });
+      }
     }
 
     res.status(200).json({
@@ -1083,6 +1119,117 @@ export const cancelBooking = async (
     await cancelOpenInvoices();
 
     res.status(200).json({ success: true, message: 'Booking cancelled' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const MAX_BOOKING_IMAGES = 6;
+
+async function uploadBufferToCloudinary(
+  buffer: Buffer,
+  folder: string
+): Promise<string> {
+  const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: 'image',
+        transformation: [{ width: 1600, crop: 'limit', quality: 'auto' }],
+      },
+      (error, uploadResult) => {
+        if (error || !uploadResult?.secure_url) {
+          reject(error ?? new Error('Cloudinary upload failed'));
+          return;
+        }
+        resolve({ secure_url: uploadResult.secure_url });
+      }
+    );
+    Readable.from(buffer).pipe(stream);
+  });
+  return result.secure_url;
+}
+
+/**
+ * Client attaches reference photos after booking create.
+ * Stored on booking.serviceImages (Cloudinary HTTPS URLs).
+ */
+export const uploadServiceImages = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = toObjectId(req.params.id);
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    const ownerId =
+      typeof booking.clientId === 'object' && booking.clientId
+        ? String((booking.clientId as { _id?: unknown })._id ?? booking.clientId)
+        : String(booking.clientId);
+    if (ownerId !== req.user!.id) {
+      res.status(403).json({ success: false, message: 'Access denied' });
+      return;
+    }
+
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    if (files.length === 0) {
+      res.status(400).json({ success: false, message: 'No images uploaded' });
+      return;
+    }
+
+    if (
+      !process.env.CLOUDINARY_CLOUD_NAME ||
+      process.env.CLOUDINARY_CLOUD_NAME === 'your_cloud_name'
+    ) {
+      res.status(503).json({
+        success: false,
+        message:
+          'Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME in backend .env',
+      });
+      return;
+    }
+
+    const existing = Array.isArray(booking.serviceImages)
+      ? booking.serviceImages
+      : [];
+    const remaining = Math.max(0, MAX_BOOKING_IMAGES - existing.length);
+    if (remaining <= 0) {
+      res.status(400).json({
+        success: false,
+        message: `Maximum ${MAX_BOOKING_IMAGES} photos per booking`,
+      });
+      return;
+    }
+
+    const toUpload = files.slice(0, remaining);
+    const urls: string[] = [];
+    for (const file of toUpload) {
+      const url = await uploadBufferToCloudinary(
+        file.buffer,
+        `atomik/bookings/${booking.bookingId}`
+      );
+      urls.push(url);
+    }
+
+    booking.serviceImages = [...existing, ...urls];
+    await booking.save();
+
+    const populated = await Booking.findById(bookingId)
+      .populate('venueId')
+      .populate('technicianId', 'name phone avatar')
+      .populate('clientId', 'name phone')
+      .populate('invoiceId');
+
+    res.status(200).json({
+      success: true,
+      serviceImages: booking.serviceImages,
+      booking: serializeBookingForRole(populated, req.user!.role),
+    });
   } catch (err) {
     next(err);
   }

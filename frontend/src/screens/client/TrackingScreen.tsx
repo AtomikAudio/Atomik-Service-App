@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { Header } from '../../components/common/Header';
@@ -8,7 +8,10 @@ import { Button } from '../../components/common/Button';
 import { LoadingView } from '../../components/common/LoadingView';
 import { ErrorView } from '../../components/common/ErrorView';
 import { TechnicianAssignedCard } from '../../components/client/TechnicianAssignedCard';
-import { bookingService, Booking } from '../../services/bookings';
+import { RateTechnicianModal } from '../../components/client/RateTechnicianModal';
+import { bookingService, Booking, BookingInvoice } from '../../services/bookings';
+import { paymentService, Invoice } from '../../services/payments';
+import { reviewService } from '../../services/reviews';
 import {
   formatServiceTypeLabel,
   getBookedServiceSummary,
@@ -20,9 +23,15 @@ import { SparePartsSummary } from '../../components/common/SparePartsSummary';
 import { PaymentBreakdownCard } from '../../components/common/PaymentBreakdownCard';
 import { bookingHasSpareParts } from '../../utils/spareParts';
 import { invoiceNeedsPayment, isExtraPartsOnlyPayment } from '../../utils/invoice';
+import { resolveBillInvoice } from '../../utils/billInvoice';
 import { navigateToBookingPayment } from '../../utils/navigatePayment';
 import { RescheduleProposalCard } from '../../components/client/RescheduleProposalCard';
-import { formatINR } from '../../utils/payment';
+import {
+  hasRatedBooking,
+  markBookingRated,
+  markRatingSkipped,
+  shouldPromptRating,
+} from '../../utils/ratingPrompt';
 import { COLORS } from '../../constants/colors';
 
 const POLL_MS = 20_000;
@@ -35,9 +44,13 @@ interface Props {
 export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const { id } = route.params;
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showBill, setShowBill] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
+  const [ratingLoading, setRatingLoading] = useState(false);
+  const [canRate, setCanRate] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -46,6 +59,35 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
       try {
         const b = await bookingService.getBookingById(id);
         setBooking(b);
+        try {
+          const invoices = await paymentService.getMyInvoices();
+          const inv =
+            invoices.find((i) => {
+              const bid =
+                typeof i.bookingId === 'object' ? i.bookingId._id : i.bookingId;
+              return bid === b._id;
+            }) ?? null;
+          setPaymentInvoice(inv);
+        } catch {
+          setPaymentInvoice(null);
+        }
+
+        let prompt = false;
+        if (b.status === 'completed' && getTechnicianFromBooking(b)) {
+          if (await shouldPromptRating(b._id)) {
+            try {
+              const { reviewed } = await reviewService.getForBooking(b._id);
+              if (reviewed) {
+                await markBookingRated(b._id);
+              } else {
+                prompt = true;
+              }
+            } catch {
+              prompt = true;
+            }
+          }
+        }
+        setCanRate(prompt);
       } catch (e: any) {
         if (!silent) setError(e.message);
       } finally {
@@ -67,14 +109,15 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   if (error && !booking) return <ErrorView message={error} onRetry={() => load(false)} />;
   if (!booking) return null;
 
-  const technician = getTechnicianFromBooking(booking);
-  const needsPay = invoiceNeedsPayment(booking.invoice);
-  const hasSpare = bookingHasSpareParts(booking);
-  const extraPartsOnly = isExtraPartsOnlyPayment(
+  const invoice: BookingInvoice | undefined = resolveBillInvoice(
     booking.invoice,
-    booking.spareParts
+    paymentInvoice
   );
-  const pay = () => navigateToBookingPayment(navigation, booking, booking.invoice);
+  const technician = getTechnicianFromBooking(booking);
+  const needsPay = invoiceNeedsPayment(invoice);
+  const hasSpare = bookingHasSpareParts(booking);
+  const extraPartsOnly = isExtraPartsOnlyPayment(invoice, booking.spareParts);
+  const pay = () => navigateToBookingPayment(navigation, booking, invoice);
   const serviceTypeLabel = formatServiceTypeLabel(booking.serviceType);
   const bookedServices = getBookedServiceSummary(booking);
   const clientNotes = parseBookingClientNotes(booking.notes);
@@ -88,14 +131,7 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
     .filter(Boolean)
     .join(', ');
 
-  const invoice = booking.invoice;
   const taxRate = invoice?.taxRate ?? 0.18;
-  const basePreTax =
-    (invoice?.serviceCharges ?? 0) + (invoice?.technicianCharges ?? 0);
-  const baseGst = Math.round(basePreTax * taxRate);
-  const baseTotal = basePreTax + baseGst;
-  const amountPaid = invoice?.amountPaid ?? 0;
-  const showPreviousPayment = !!invoice && amountPaid > 0;
 
   return (
     <View style={styles.container}>
@@ -177,107 +213,82 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
           />
         </View>
 
+        {canRate ? (
+          <Button
+            label="RATE TECHNICIAN"
+            onPress={() => setRateOpen(true)}
+            style={styles.rateBtn}
+          />
+        ) : null}
+
         {showBill ? (
           <View style={styles.billSection}>
-            {showPreviousPayment ? (
-              <Card
-                padding={16}
-                style={[
-                  styles.billCard,
-                  styles.billCardTop,
-                  hasSpare ? null : styles.billCardAlone,
-                ]}
-              >
-                <Text style={styles.sectionLabel}>PREVIOUS PAYMENT</Text>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Service charges</Text>
-                  <Text style={styles.billValue}>
-                    {formatINR(invoice!.serviceCharges ?? 0)}
-                  </Text>
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Technician charges</Text>
-                  <Text style={styles.billValue}>
-                    {formatINR(invoice!.technicianCharges ?? 0)}
-                  </Text>
-                </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>
-                    GST ({Math.round(taxRate * 100)}%)
-                  </Text>
-                  <Text style={styles.billValue}>{formatINR(baseGst)}</Text>
-                </View>
-                <View style={styles.billDivider} />
-                <View style={styles.billRow}>
-                  <Text style={styles.billTotalLabel}>Amount paid</Text>
-                  <Text style={styles.billPaidValue}>
-                    {formatINR(amountPaid)}
-                  </Text>
-                </View>
-                {invoice?.paidAt ? (
-                  <Text style={styles.billMeta}>
-                    Paid on{' '}
-                    {new Date(invoice.paidAt).toLocaleString('en-IN', {
-                      timeZone: 'Asia/Kolkata',
-                    })}
-                  </Text>
-                ) : (
-                  <Text style={styles.billMeta}>
-                    Base service total {formatINR(baseTotal)} settled
-                  </Text>
-                )}
+            {invoice ? (
+              <PaymentBreakdownCard
+                invoice={invoice}
+                sparePartsLines={booking.spareParts}
+                onPayPress={needsPay ? pay : undefined}
+              />
+            ) : (
+              <Card padding={16} style={styles.billCardAlone}>
+                <Text style={styles.waitingBody}>
+                  No invoice available for this booking yet.
+                </Text>
               </Card>
-            ) : null}
+            )}
 
             {hasSpare ? (
               <Card
                 padding={16}
                 style={[
                   styles.billCard,
-                  showPreviousPayment
-                    ? styles.billCardBottom
-                    : styles.billCardAlone,
+                  invoice ? styles.billCardBottom : styles.billCardAlone,
                 ]}
               >
-                <Text style={styles.sectionLabel}>EXTRA PARTS</Text>
+                <Text style={styles.sectionLabel}>EXTRA PARTS DETAIL</Text>
                 <SparePartsSummary
                   parts={booking.spareParts}
                   title=""
                   showWithGst
                   taxRate={taxRate}
                 />
-                {invoice ? (
-                  <>
-                    {needsPay ? (
-                      <Button
-                        label={
-                          extraPartsOnly ? 'PAY EXTRA PARTS' : 'PAY NOW'
-                        }
-                        onPress={pay}
-                        style={styles.billPayBtn}
-                      />
-                    ) : (
-                      <Text style={styles.billMeta}>Extra parts settled</Text>
-                    )}
-                  </>
+                {invoice && !needsPay ? (
+                  <Text style={styles.billMeta}>Extra parts settled</Text>
                 ) : null}
-              </Card>
-            ) : invoice && !showPreviousPayment ? (
-              <PaymentBreakdownCard
-                invoice={invoice}
-                sparePartsLines={booking.spareParts}
-                onPayPress={needsPay ? pay : undefined}
-              />
-            ) : !invoice ? (
-              <Card padding={16} style={styles.billCardAlone}>
-                <Text style={styles.waitingBody}>
-                  No invoice available for this booking yet.
-                </Text>
               </Card>
             ) : null}
           </View>
         ) : null}
       </ScrollView>
+
+      <RateTechnicianModal
+        visible={rateOpen}
+        technicianName={technician?.name || 'your technician'}
+        loading={ratingLoading}
+        onSubmit={async (rating) => {
+          setRatingLoading(true);
+          try {
+            await reviewService.submit(booking._id, rating);
+            await markBookingRated(booking._id);
+            setCanRate(false);
+          } catch (e: unknown) {
+            const msg =
+              e instanceof Error ? e.message : 'Could not submit rating';
+            Alert.alert('Rating failed', msg);
+            throw e;
+          } finally {
+            setRatingLoading(false);
+          }
+        }}
+        onDismiss={() => {
+          void (async () => {
+            if (!(await hasRatedBooking(booking._id))) {
+              await markRatingSkipped(booking._id);
+            }
+            setRateOpen(false);
+          })();
+        }}
+      />
     </View>
   );
 };
@@ -368,6 +379,9 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     marginTop: 16,
+  },
+  rateBtn: {
+    marginTop: 12,
   },
   billSection: {
     marginTop: 12,

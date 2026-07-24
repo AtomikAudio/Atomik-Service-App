@@ -11,40 +11,42 @@ import {
 } from 'react-native';
 import { PressableScale } from '../../components/common/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../../components/common/Button';
+import { AtomikLogo } from '../../components/common/AtomikLogo';
+import {
+  AudioTimelineIcon,
+  CostBreakdownIcon,
+  SchedulePrecisionIcon,
+} from '../../components/onboarding/OnboardingIcons';
 import { COLORS } from '../../constants/colors';
 import { useDispatch } from 'react-redux';
 import { setOnboarded } from '../../store/authSlice';
 import { setOnboardedFlag } from '../../services/tokenStore';
+
 const { width, height } = Dimensions.get('window');
 
 const slides: {
   id: string;
-  ionicon: keyof typeof Ionicons.glyphMap;
   title: string;
   desc: string;
-  accent: string;
+  Icon: React.FC<{ size?: number; color?: string }>;
 }[] = [
   {
     id: '1',
-    ionicon: 'calendar-outline',
-    title: 'Schedule\nWith Precision',
-    desc: 'Book general service, inspections, or emergency visits at your venue with real-time technician assignment.',
-    accent: '#8e302f',
+    title: 'Track Every\nService Detail',
+    desc: 'Live job updates, technician tracking, invoice management, and complete visibility from booking to completion.',
+    Icon: AudioTimelineIcon,
   },
   {
     id: '2',
-    ionicon: 'analytics-outline',
-    title: 'Track Every\nService Detail',
-    desc: 'Live status updates, technician tracking, invoice management — complete visibility from booking to completion.',
-    accent: '#8e302f',
+    title: 'Service Cost,\nSimplified',
+    desc: 'Get transparent pricing, detailed estimates, and a clear cost breakdown.',
+    Icon: CostBreakdownIcon,
   },
   {
     id: '3',
-    ionicon: 'time-outline',
-    title: 'Time Is Our\nCornerstone',
-    desc: 'Track every service in real time — live status, technician tracking and clear invoicing, from booking to completion.',
-    accent: '#8e302f',
+    title: 'Save Time with\nSmart Scheduling',
+    desc: 'Book services in seconds, choose your preferred time, and track your service with ease.',
+    Icon: SchedulePrecisionIcon,
   },
 ];
 
@@ -121,57 +123,62 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       outputRange: [0.4, 1, 0.4],
       extrapolate: 'clamp',
     });
+    const SlideIcon = item.Icon;
 
     return (
-    <View style={styles.slide}>
-      {/* Background grid */}
-      <View style={styles.gridBg}>
-        {Array.from({ length: 20 }).map((_, i) => (
-          <View key={i} style={styles.gridLine} />
-        ))}
-      </View>
+      <View style={styles.slide}>
+        <View style={styles.gridBg}>
+          {Array.from({ length: 20 }).map((_, i) => (
+            <View key={i} style={styles.gridLine} />
+          ))}
+        </View>
 
-      {/* Icon container */}
-      <View style={styles.iconCircle}>
-        <Animated.View
-          style={[
-            styles.ring,
-            styles.ring2,
-            { opacity: ringOpacity, transform: [{ scale: ringScale }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.ring,
-            styles.ring1,
-            {
-              opacity: ringPulse.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.35, 0.65],
-              }),
-              transform: [
-                {
-                  scale: ringPulse.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.08],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
-        <Animated.View style={[styles.iconInner, { transform: [{ scale: iconScale }] }]}>
-          <Ionicons name={item.ionicon} size={50} color={COLORS.white} />
+        <View style={styles.logoWrap}>
+          <AtomikLogo size="lg" variant="horizontal" />
+        </View>
+
+        <View style={styles.iconCircle}>
+          <Animated.View
+            style={[
+              styles.ring,
+              styles.ring2,
+              { opacity: ringOpacity, transform: [{ scale: ringScale }] },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.ring,
+              styles.ring1,
+              {
+                opacity: ringPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.35, 0.65],
+                }),
+                transform: [
+                  {
+                    scale: ringPulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.08],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+          <Animated.View
+            style={[styles.iconInner, { transform: [{ scale: iconScale }] }]}
+          >
+            <SlideIcon size={48} color={COLORS.white} />
+          </Animated.View>
+        </View>
+
+        <Animated.View style={[styles.slideContent, { opacity: contentOpacity }]}>
+          <View style={styles.redAccent} />
+          <Text style={styles.slideTitle}>{item.title}</Text>
+          <Text style={styles.slideDesc}>{item.desc}</Text>
         </Animated.View>
       </View>
-
-      <Animated.View style={[styles.slideContent, { opacity: contentOpacity }]}>
-        <View style={styles.redAccent} />
-        <Text style={styles.slideTitle}>{item.title}</Text>
-        <Text style={styles.slideDesc}>{item.desc}</Text>
-      </Animated.View>
-    </View>
-  );
+    );
   };
 
   return (
@@ -194,9 +201,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         }}
       />
 
-      {/* Bottom Controls */}
       <View style={styles.controls}>
-        {/* Dots */}
         <View style={styles.dots}>
           {slides.map((_, i) => {
             const dotWidth = scrollX.interpolate({
@@ -219,29 +224,20 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <View style={styles.btnRow}>
-          <TouchableOpacity
-            onPress={handleDone}
-            style={styles.skipBtn}
-          >
+          <TouchableOpacity onPress={handleDone} style={styles.skipBtn}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
 
           <PressableScale onPress={goNext} style={styles.nextBtn} scaleTo={0.92}>
             <Ionicons
-              name={currentIndex === slides.length - 1 ? 'checkmark' : 'arrow-forward'}
+              name={
+                currentIndex === slides.length - 1 ? 'checkmark' : 'arrow-forward'
+              }
               size={22}
               color={COLORS.white}
             />
           </PressableScale>
         </View>
-
-        {currentIndex === slides.length - 1 && (
-          <Button
-            label="GET STARTED"
-            onPress={handleDone}
-            style={{ marginTop: 16 }}
-          />
-        )}
       </View>
     </View>
   );
@@ -274,12 +270,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
     marginHorizontal: 18,
   },
+  logoWrap: {
+    position: 'absolute',
+    top: height * 0.08,
+    alignItems: 'center',
+    width: '100%',
+  },
   iconCircle: {
     width: 160,
     height: 160,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 52,
+    marginTop: 36,
     position: 'relative',
   },
   iconInner: {
@@ -348,10 +351,6 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: COLORS.grayDark,
-  },
-  dotActive: {
-    backgroundColor: COLORS.red,
-    width: 20,
   },
   btnRow: {
     flexDirection: 'row',

@@ -16,12 +16,13 @@ import { bookingService, Booking } from '../../services/bookings';
 import { paymentService, Invoice } from '../../services/payments';
 import { getTechnicianFromBooking } from '../../utils/bookingDisplay';
 import { SparePartsSummary } from '../../components/common/SparePartsSummary';
+import { PaymentBreakdownCard } from '../../components/common/PaymentBreakdownCard';
 import { bookingHasSpareParts } from '../../utils/spareParts';
 import {
   invoiceNeedsPayment,
-  getInvoiceBalanceDue,
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
+import { resolveBillInvoice } from '../../utils/billInvoice';
 import { navigateToBookingPayment } from '../../utils/navigatePayment';
 import { COLORS } from '../../constants/colors';
 
@@ -30,12 +31,10 @@ interface Props {
   route: { params: { id: string; readOnly?: boolean } };
 }
 
-const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
-
 export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { id, readOnly = false } = route.params;
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(false);
@@ -60,7 +59,7 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
         const bid = typeof i.bookingId === 'object' ? i.bookingId._id : i.bookingId;
         return bid === b._id;
       });
-      setInvoice(inv ?? null);
+      setPaymentInvoice(inv ?? null);
     } catch (e: any) {
       if (!silent) setError(e.message || 'Failed to load');
     } finally {
@@ -106,6 +105,7 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
 
   const technician = getTechnicianFromBooking(booking);
   const canCancel = !readOnly && !['completed', 'cancelled'].includes(booking.status);
+  const invoice = resolveBillInvoice(booking.invoice, paymentInvoice);
 
   return (
     <View style={styles.container}>
@@ -136,28 +136,14 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
           </Card>
         ) : null}
 
-        {invoice && (
-          <Card style={styles.invoiceCard} padding={18}>
-            <Text style={styles.billTitle}>Invoice {invoice.invoiceNumber}</Text>
-            {invoice.spareParts > 0 ? (
-              <View style={styles.row}>
-                <Text style={styles.muted}>Extra parts</Text>
-                <Text style={styles.value}>{formatINR(invoice.spareParts)}</Text>
-              </View>
-            ) : null}
-            <View style={styles.row}>
-              <Text style={styles.muted}>Total</Text>
-              <Text style={styles.total}>{formatINR(invoice.totalAmount)}</Text>
-            </View>
-            {invoiceNeedsPayment(invoice) ? (
-              <View style={styles.row}>
-                <Text style={styles.muted}>Balance due</Text>
-                <Text style={styles.due}>{formatINR(getInvoiceBalanceDue(invoice))}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.muted}>Status: {invoice.status}</Text>
-          </Card>
-        )}
+        {invoice ? (
+          <View style={styles.invoiceCard}>
+            <PaymentBreakdownCard
+              invoice={invoice}
+              sparePartsLines={booking.spareParts}
+            />
+          </View>
+        ) : null}
 
         {!readOnly ? (
           <>
@@ -215,6 +201,7 @@ export const ServiceDetailsScreen: React.FC<Props> = ({ navigation, route }) => 
         confirmDestructive
         loading={cancelling}
         icon="close-circle-outline"
+        showNoRefundPolicy
         onConfirm={confirmCancelBooking}
         onCancel={() => {
           if (!cancelling) setCancelConfirmOpen(false);
@@ -252,20 +239,6 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   invoiceCard: { marginTop: 16 },
-  billTitle: {
-    fontFamily: 'Montserrat_600SemiBold',
-    fontSize: 14,
-    color: COLORS.white,
-    marginBottom: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  muted: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: COLORS.gray },
-  total: { fontFamily: 'Montserrat_700Bold', fontSize: 18, color: COLORS.white },
-  due: { fontFamily: 'Montserrat_700Bold', fontSize: 16, color: COLORS.red },
   payCancelRow: {
     flexDirection: 'row',
     gap: 8,

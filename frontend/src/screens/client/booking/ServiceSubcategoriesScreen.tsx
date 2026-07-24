@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import {
   EXTRA_PARTS_CHARGE_NOTE,
@@ -14,39 +15,67 @@ import {
   GENERAL_SERVICE_ITEMS,
   GENERAL_SERVICE_PACKAGE,
   GENERAL_SERVICE_PRICE,
+  GENERAL_VISIT_INCLUSIONS,
+  GENERAL_VISIT_ITEM,
+  GENERAL_VISIT_PRICE,
 } from '../../../constants/audioServices';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { COLORS } from '../../../constants/colors';
 
+type ServiceKind = 'general-service' | 'general-visit';
+
 interface Props {
   navigation: any;
+  route?: { params?: { kind?: ServiceKind } };
 }
 
-export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
+const FOOTER_TOP_PAD = 20;
+const CONTINUE_BTN_HEIGHT = 52;
+
+export const ServiceSubcategoriesScreen: React.FC<Props> = ({
+  navigation,
+  route,
+}) => {
+  const insets = useSafeAreaInsets();
   const { addCategory, removeCategory } = useBookingDraft();
+  const kind: ServiceKind =
+    route?.params?.kind === 'general-visit' ? 'general-visit' : 'general-service';
+  const isVisit = kind === 'general-visit';
+
+  const title = isVisit ? 'General Visit' : 'General Service';
+  const hint = isVisit
+    ? 'Your General Visit covers the following.'
+    : 'Your General Service package covers the following.';
+  const inclusions = isVisit
+    ? GENERAL_VISIT_INCLUSIONS
+    : GENERAL_SERVICE_INCLUSIONS;
+  const subtotal = isVisit ? GENERAL_VISIT_PRICE : GENERAL_SERVICE_PRICE;
+
+  const footerBottomPad = Math.max(insets.bottom, 16);
+  const footerHeight = FOOTER_TOP_PAD + CONTINUE_BTN_HEIGHT + footerBottomPad;
+  // Extra gap so the charge note sits fully above the sticky CONTINUE bar.
+  const scrollBottomPad = footerHeight + 28;
 
   const continueFlow = () => {
     GENERAL_SERVICE_ITEMS.forEach((s) => removeCategory(s.id));
-    addCategory(GENERAL_SERVICE_PACKAGE.id);
+    removeCategory(GENERAL_SERVICE_PACKAGE.id);
+    removeCategory(GENERAL_VISIT_ITEM.id);
+    addCategory(isVisit ? GENERAL_VISIT_ITEM.id : GENERAL_SERVICE_PACKAGE.id);
     navigation.navigate('PlaceOrder');
   };
 
   return (
     <View style={styles.container}>
-      <BookingFlowHeader
-        title="General Service"
-        onBack={() => navigation.goBack()}
-      />
+      <BookingFlowHeader title={title} onBack={() => navigation.goBack()} />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingBottom: scrollBottomPad }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.sectionLabel}>WHAT'S INCLUDED</Text>
-        <Text style={styles.hint}>
-          Your General Service package covers the following.
-        </Text>
+        <Text style={styles.hint}>{hint}</Text>
 
-        {GENERAL_SERVICE_INCLUSIONS.map((item) => (
+        {inclusions.map((item) => (
           <View key={item.id} style={styles.row}>
             <View style={styles.rowIcon}>
               <Ionicons
@@ -64,7 +93,7 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.subtotalRow}>
           <Text style={styles.subtotalLabel}>Subtotal</Text>
-          <Text style={styles.subtotalValue}>{GENERAL_SERVICE_PRICE} + GST</Text>
+          <Text style={styles.subtotalValue}>{subtotal} + GST</Text>
         </View>
 
         <View style={styles.chargeNote}>
@@ -78,7 +107,7 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: footerBottomPad }]}>
         <TouchableOpacity style={styles.continueBtn} onPress={continueFlow}>
           <Text style={styles.continueText}>CONTINUE</Text>
         </TouchableOpacity>
@@ -89,7 +118,7 @@ export const ServiceSubcategoriesScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: 20, paddingBottom: 100 },
+  scroll: { paddingHorizontal: 20, paddingTop: 20 },
   sectionLabel: {
     fontFamily: 'SpaceMono_400Regular',
     fontSize: 9,
@@ -166,14 +195,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingBottom: 32,
+    paddingTop: FOOTER_TOP_PAD,
+    paddingHorizontal: 20,
     backgroundColor: COLORS.background,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   continueBtn: {
-    height: 52,
+    height: CONTINUE_BTN_HEIGHT,
     backgroundColor: COLORS.red,
     borderRadius: 6,
     alignItems: 'center',

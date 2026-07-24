@@ -30,11 +30,23 @@ export function toISODateString(year: number, month: number, day: number): strin
   return `${year}-${pad2(month + 1)}-${pad2(day)}`;
 }
 
+/** True when the day is today (IST) or earlier — earliest bookable day is tomorrow IST. */
 export function isPastISTDate(year: number, month: number, day: number): boolean {
   const today = getISTDateParts();
   const candidate = toISODateString(year, month, day);
   const todayStr = toISODateString(today.year, today.month, today.day);
-  return candidate < todayStr;
+  return candidate <= todayStr;
+}
+
+/** Tomorrow (IST) as YYYY-MM-DD — first day a client may book. */
+export function earliestBookableISODateIST(date = new Date()): string {
+  const today = getISTDateParts(date);
+  const noonToday = parseDateInIST(
+    toISODateString(today.year, today.month, today.day)
+  );
+  const tomorrow = new Date(noonToday.getTime() + 24 * 60 * 60 * 1000);
+  const parts = getISTDateParts(tomorrow);
+  return toISODateString(parts.year, parts.month, parts.day);
 }
 
 export function parseDateInIST(dateStr: string): Date {

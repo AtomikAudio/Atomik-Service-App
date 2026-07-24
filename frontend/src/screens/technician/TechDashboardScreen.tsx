@@ -38,9 +38,9 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [jobs, setJobs] = useState<Booking[]>([]);
   const [technicians, setTechnicians] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [techTab, setTechTab] = useState<'available' | 'ongoing' | 'pending'>(
-    'available'
-  );
+  const [techTab, setTechTab] = useState<
+    'available' | 'ongoing' | 'pending' | 'taken'
+  >('available');
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -211,40 +211,46 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   label: 'Pending',
                   count: awaitingReschedule.length,
                 },
+                {
+                  key: 'taken',
+                  label: 'Taken',
+                  count: othersJobs.length,
+                },
               ] as const
             ).map((t) => {
               const active = techTab === t.key;
               return (
-                <PressableScale
-                  key={t.key}
-                  style={styles.techTabWrap}
-                  scaleTo={0.96}
-                  onPress={() => setTechTab(t.key)}
-                >
-                  <Card
-                    padding={14}
-                    style={[styles.techTab, active && styles.techTabActive]}
+                <View key={t.key} style={styles.techTabWrap}>
+                  <PressableScale
+                    style={styles.techTabPressable}
+                    scaleTo={0.96}
+                    onPress={() => setTechTab(t.key)}
                   >
-                    <Text
-                      style={[
-                        styles.techTabNum,
-                        active && styles.techTabNumActive,
-                      ]}
+                    <Card
+                      padding={12}
+                      style={[styles.techTab, active && styles.techTabActive]}
                     >
-                      {t.count}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.techTabLabel,
-                        active && styles.techTabLabelActive,
-                      ]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                    >
-                      {t.label}
-                    </Text>
-                  </Card>
-                </PressableScale>
+                      <Text
+                        style={[
+                          styles.techTabNum,
+                          active && styles.techTabNumActive,
+                        ]}
+                      >
+                        {t.count}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.techTabLabel,
+                          active && styles.techTabLabelActive,
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {t.label}
+                      </Text>
+                    </Card>
+                  </PressableScale>
+                </View>
               );
             })}
           </View>
@@ -282,19 +288,7 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
               </>
             ) : null}
 
-            {othersJobs.length > 0 ? (
-              <>
-                <Text style={styles.sectionTitle}>Taken by Others</Text>
-                <Text style={styles.sectionHint}>
-                  These jobs were accepted by another technician.
-                </Text>
-                {othersJobs.map((j) => renderJob(j, 'other'))}
-              </>
-            ) : null}
-
-            {openJobs.length === 0 &&
-            declinedJobs.length === 0 &&
-            othersJobs.length === 0 ? (
+            {openJobs.length === 0 && declinedJobs.length === 0 ? (
               <Text style={styles.empty}>No available jobs right now.</Text>
             ) : null}
           </>
@@ -346,6 +340,20 @@ export const TechDashboardScreen: React.FC<Props> = ({ navigation }) => {
                   </View>
                 </PressableScale>
               ))
+            )}
+          </>
+        ) : null}
+
+        {!isMaster && techTab === 'taken' ? (
+          <>
+            <Text style={styles.sectionTitle}>Taken by Others</Text>
+            <Text style={styles.sectionHint}>
+              These jobs were accepted by another technician.
+            </Text>
+            {othersJobs.length === 0 ? (
+              <Text style={styles.empty}>No jobs taken by others right now.</Text>
+            ) : (
+              othersJobs.map((j) => renderJob(j, 'other'))
             )}
           </>
         ) : null}
@@ -440,16 +448,22 @@ const styles = StyleSheet.create({
   },
   techTabs: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginBottom: 24,
   },
   techTabWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+  techTabPressable: {
+    width: '100%',
   },
   techTab: {
+    width: '100%',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
+    paddingHorizontal: 2,
   },
   techTabActive: {
     borderColor: COLORS.red,
@@ -457,7 +471,7 @@ const styles = StyleSheet.create({
   },
   techTabNum: {
     fontFamily: 'Montserrat_700Bold',
-    fontSize: 22,
+    fontSize: 18,
     color: COLORS.white,
   },
   techTabNumActive: {
@@ -465,9 +479,10 @@ const styles = StyleSheet.create({
   },
   techTabLabel: {
     fontFamily: 'Montserrat_500Medium',
-    fontSize: 12,
+    fontSize: 10,
     color: COLORS.gray,
     marginTop: 4,
+    textAlign: 'center',
   },
   techTabLabelActive: {
     color: COLORS.white,
@@ -519,14 +534,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   jobVenue: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 13,
-    color: COLORS.gray,
+    fontFamily: 'Montserrat_500Medium',
+    fontSize: 14,
+    color: COLORS.white,
   },
   assignedLine: {
     fontFamily: 'Montserrat_500Medium',
     fontSize: 12,
-    color: COLORS.grayDark,
+    color: COLORS.gray,
     marginTop: 6,
   },
   rescheduleLine: {
@@ -537,8 +552,8 @@ const styles = StyleSheet.create({
   },
   jobMeta: {
     fontFamily: 'SpaceMono_400Regular',
-    fontSize: 10,
-    color: COLORS.grayDark,
+    fontSize: 12,
+    color: COLORS.white,
     marginTop: 6,
   },
   viewDetailsLink: { marginTop: 10 },

@@ -29,8 +29,12 @@ export interface Invoice {
   taxRate?: number;
   taxAmount: number;
   totalAmount: number;
+  couponCode?: string;
+  discountPercent?: number;
+  discountAmount?: number;
   amountPaid?: number;
   balanceDue?: number;
+  amountReceived?: number;
   dueDate: string;
   paidAt?: string;
   paymentHistory?: InvoicePaymentEntry[];
@@ -45,6 +49,9 @@ export interface PaymentHistoryRow {
   serviceType?: string;
   bookingRef?: string;
   bookingMongoId?: string;
+  quotedTotal?: number;
+  discountAmount?: number;
+  couponCode?: string;
 }
 
 export function flattenPaymentHistory(invoices: Invoice[]): PaymentHistoryRow[] {
@@ -54,6 +61,7 @@ export function flattenPaymentHistory(invoices: Invoice[]): PaymentHistoryRow[] 
     const booking =
       typeof inv.bookingId === 'object' ? inv.bookingId : null;
     const history = inv.paymentHistory ?? [];
+    const discountAmount = Math.max(0, Number(inv.discountAmount) || 0);
 
     history.forEach((entry, idx) => {
       const amount = Number(entry?.amount);
@@ -76,6 +84,9 @@ export function flattenPaymentHistory(invoices: Invoice[]): PaymentHistoryRow[] 
         serviceType: booking?.serviceType,
         bookingRef: booking?.bookingId,
         bookingMongoId: booking?._id,
+        quotedTotal: inv.totalAmount,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        couponCode: inv.couponCode,
       });
     });
   }

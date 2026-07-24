@@ -21,6 +21,7 @@ import { bookingService } from '../../services/bookings';
 import { SparePartLine } from '../../utils/spareParts';
 import {
   getInvoiceBalanceDue,
+  getInvoiceCashPaid,
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
@@ -30,6 +31,7 @@ import {
   ThemedAlertModal,
   ThemedConfirmModal,
 } from '../../components/common/ThemedConfirmModal';
+import { NoRefundPolicyNote } from '../../components/common/NoRefundPolicyNote';
 import { formatBookingSchedule } from '../../utils/schedule';
 import { formatServiceTypeLabel } from '../../utils/bookingDisplay';
 import { useBookingDraft } from '../../context/BookingDraftContext';
@@ -340,6 +342,23 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const goToClientHome = () => {
+    let nav: typeof navigation | undefined = navigation;
+    for (let i = 0; i < 4 && nav; i += 1) {
+      const names = nav.getState?.()?.routeNames as string[] | undefined;
+      if (names?.includes('Home')) {
+        nav.navigate('Home', { screen: 'HomeMain' });
+        return;
+      }
+      if (names?.includes('HomeMain')) {
+        nav.navigate('HomeMain');
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+    navigation.navigate('HomeMain');
+  };
+
   const showPaymentSuccess = () => {
     resetDraft();
     setResultAlert({
@@ -348,10 +367,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         ? 'Extra parts payment received. Thank you!'
         : 'Your payment is complete and your booking is confirmed.',
       icon: 'checkmark-circle-outline',
-      onClose: () =>
-        bookingId
-          ? navigation.navigate('TrackService', { id: bookingId })
-          : navigation.goBack(),
+      onClose: goToClientHome,
     });
   };
 
@@ -533,7 +549,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                 {(invoice.amountPaid ?? 0) > 0 ? (
                   <Text style={styles.paidNote}>
                     Base service invoice already paid (
-                    {formatINR(invoice.amountPaid ?? 0)}).
+                    {formatINR(getInvoiceCashPaid(invoice))}).
                   </Text>
                 ) : null}
                 <View style={[styles.billRow, styles.totalRow]}>
@@ -549,12 +565,14 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                     {formatINR(invoice.serviceCharges)}
                   </Text>
                 </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Technician Charges</Text>
-                  <Text style={styles.billValue}>
-                    {formatINR(invoice.technicianCharges)}
-                  </Text>
-                </View>
+                {invoice.technicianCharges > 0 ? (
+                  <View style={styles.billRow}>
+                    <Text style={styles.billLabel}>Technician Charges</Text>
+                    <Text style={styles.billValue}>
+                      {formatINR(invoice.technicianCharges)}
+                    </Text>
+                  </View>
+                ) : null}
                 {invoice.spareParts > 0 ? (
                   <View style={styles.billRow}>
                     <Text style={styles.billLabel}>Extra parts</Text>
@@ -578,7 +596,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                     <View style={styles.billRow}>
                       <Text style={styles.billLabel}>Already paid</Text>
                       <Text style={styles.billValue}>
-                        {formatINR(invoice.amountPaid ?? 0)}
+                        {formatINR(getInvoiceCashPaid(invoice))}
                       </Text>
                     </View>
                     <View style={[styles.billRow, styles.totalRow]}>
@@ -633,7 +651,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
                     </View>
                     <Button
                       label="APPLY"
-                      variant="outline"
+                      variant="primary"
                       onPress={applyCoupon}
                       fullWidth={false}
                       style={styles.couponApplyBtn}
@@ -670,6 +688,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         ) : null}
         </ScrollView>
         <View style={styles.footer}>
+          <NoRefundPolicyNote style={styles.payPolicyNote} />
           <Button
             label={
               process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID?.includes('your_key')
@@ -717,6 +736,7 @@ export const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         confirmDestructive
         loading={loading}
         icon="close-circle-outline"
+        showNoRefundPolicy
         onConfirm={confirmCancelBooking}
         onCancel={() => {
           if (!loading) setCancelConfirmOpen(false);
@@ -806,8 +826,11 @@ const styles = StyleSheet.create({
   },
   couponApplyBtn: {
     marginTop: 4,
-    minWidth: 88,
+    minWidth: 96,
     height: 48,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.red,
+    borderColor: COLORS.red,
   },
   couponAppliedBox: {
     flexDirection: 'row',
@@ -936,6 +959,9 @@ const styles = StyleSheet.create({
     gap: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  payPolicyNote: {
+    marginBottom: 2,
   },
   cancelBtn: {
     marginTop: 0,

@@ -5,6 +5,7 @@ import {
   login,
   loginWithPhone,
   listTechnicians,
+  listTechnicianAvailability,
   getMe,
   forgotPassword,
   resetPassword,
@@ -80,6 +81,12 @@ router.get(
   authenticate,
   authorize('master_technician', 'admin'),
   listTechnicians
+);
+router.get(
+  '/technicians/availability',
+  authenticate,
+  authorize('master_technician', 'admin'),
+  listTechnicianAvailability
 );
 router.patch('/profile', authenticate, updateProfileRules, validate, updateProfile);
 router.post(

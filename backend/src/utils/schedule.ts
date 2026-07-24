@@ -68,3 +68,10 @@ export function toISODateStringIST(date: Date | string): string {
   const parsed = date instanceof Date ? date : parseScheduledDate(date);
   return istCalendarDateFromDate(parsed);
 }
+
+/** Tomorrow (IST) as YYYY-MM-DD — first day a client may book or reschedule to. */
+export function earliestBookableDateIST(now = new Date()): string {
+  const today = toISODateStringIST(now);
+  const tomorrow = new Date(parseScheduledDate(today).getTime() + 24 * 60 * 60 * 1000);
+  return toISODateStringIST(tomorrow);
+}

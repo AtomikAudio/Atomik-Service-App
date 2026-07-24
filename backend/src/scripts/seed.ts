@@ -8,6 +8,7 @@ import { Venue } from '../models/Venue';
 import { AppConfig } from '../models/AppConfig';
 import { clearDemoData } from './clearDemoData';
 import { upsertAllStaff } from './seedStaff';
+import { resolveInvoiceCharges } from '../config/pricing';
 
 // Windows / corporate DNS often fails SRV lookups for mongodb+srv — use public resolvers.
 dns.setServers(['8.8.8.8', '1.1.1.1']);
@@ -157,12 +158,14 @@ async function seedDemoOpenJob(): Promise<void> {
   scheduledDate.setDate(scheduledDate.getDate() + 2);
   scheduledDate.setHours(0, 0, 0, 0);
 
-  const serviceCharges = 6500;
-  const technicianCharges = 2500;
-  const spareParts = 0;
-  const subtotal = serviceCharges + technicianCharges + spareParts;
-  const taxAmount = Math.round(subtotal * 0.18);
-  const totalAmount = subtotal + taxAmount;
+  const {
+    serviceCharges,
+    technicianCharges,
+    spareParts,
+    taxRate,
+    taxAmount,
+    totalAmount,
+  } = resolveInvoiceCharges('general');
   const now = new Date();
 
   const booking = await Booking.create({
@@ -197,6 +200,7 @@ async function seedDemoOpenJob(): Promise<void> {
     serviceCharges,
     technicianCharges,
     spareParts,
+    taxRate,
     taxAmount,
     totalAmount,
     amountPaid: totalAmount,

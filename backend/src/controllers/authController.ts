@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { User } from '../models/User';
+import { Booking } from '../models/Booking';
 import { generateToken } from '../utils/jwt';
 import { AuthRequest } from '../middleware/auth';
 import { toE164 } from '../utils/phone';
@@ -8,6 +10,7 @@ import { verifyPhoneOtp } from './otpController';
 import crypto from 'crypto';
 import cloudinary from '../config/cloudinary';
 import { Readable } from 'stream';
+import { normalizeScheduledTime } from '../utils/schedule';
 
 const formatUser = (user: {
   _id: { toString(): string };
@@ -173,6 +176,86 @@ export const listTechnicians = async (
         phone: t.phone ?? '',
         avatar: t.avatar,
       })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const TECH_BUSY_STATUSES = [
+  'technician_assigned',
+  'en_route',
+  'arrived',
+  'in_progress',
+] as const;
+
+/**
+ * Per-technician free/busy for assign UIs.
+ * When scheduledDate (+ optional time) is provided, busy = conflict on that slot.
+ * Otherwise busy = any active assignment.
+ */
+export const listTechnicianAvailability = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const scheduledDateRaw = String(req.query.scheduledDate ?? '').trim();
+    const scheduledTimeRaw = String(req.query.scheduledTime ?? '').trim();
+    const excludeBookingId = String(req.query.excludeBookingId ?? '').trim();
+
+    const technicians = await User.find({
+      role: 'technician',
+      isActive: true,
+    })
+      .select('name phone')
+      .sort({ name: 1 });
+
+    const techIds = technicians.map((t) => t._id);
+
+    const filter: Record<string, unknown> = {
+      technicianId: { $in: techIds },
+      status: { $in: [...TECH_BUSY_STATUSES] },
+    };
+    if (excludeBookingId && mongoose.Types.ObjectId.isValid(excludeBookingId)) {
+      filter._id = { $ne: new mongoose.Types.ObjectId(excludeBookingId) };
+    }
+
+    const dateOnly = scheduledDateRaw.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+      filter.scheduledDate = {
+        $gte: new Date(`${dateOnly}T00:00:00+05:30`),
+        $lte: new Date(`${dateOnly}T23:59:59.999+05:30`),
+      };
+      if (scheduledTimeRaw) {
+        filter.scheduledTime = normalizeScheduledTime(scheduledTimeRaw);
+      }
+    }
+
+    const busyBookings = await Booking.find(filter)
+      .select('technicianId scheduledDate scheduledTime status bookingId')
+      .lean();
+
+    const busyByTech = new Map<string, number>();
+    for (const b of busyBookings) {
+      const tid = String(b.technicianId ?? '');
+      if (!tid) continue;
+      busyByTech.set(tid, (busyByTech.get(tid) ?? 0) + 1);
+    }
+
+    res.status(200).json({
+      success: true,
+      technicians: technicians.map((t) => {
+        const id = t._id.toString();
+        const busyCount = busyByTech.get(id) ?? 0;
+        return {
+          id,
+          name: t.name,
+          phone: t.phone ?? '',
+          free: busyCount === 0,
+          busyCount,
+        };
+      }),
     });
   } catch (err) {
     next(err);

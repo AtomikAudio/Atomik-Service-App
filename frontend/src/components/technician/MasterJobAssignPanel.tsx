@@ -67,6 +67,13 @@ export const MasterJobAssignPanel: React.FC<Props> = ({
         value={selectedTechId}
         onChange={setSelectedTechId}
         disabled={loading !== null || technicians.length === 0}
+        scheduledDate={
+          typeof job.scheduledDate === 'string'
+            ? job.scheduledDate
+            : String(job.scheduledDate ?? '')
+        }
+        scheduledTime={job.scheduledTime}
+        excludeBookingId={job._id}
       />
 
       <View style={styles.actions}>

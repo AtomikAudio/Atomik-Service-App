@@ -1,5 +1,9 @@
 import api from './api';
+import { getToken } from './tokenStore';
+import { getApiBaseUrl } from '../config/apiConfig';
 import type { SlotAvailabilityItem, SlotHoldInfo } from '../constants/timeSlots';
+
+const API_BASE = getApiBaseUrl();
 
 export interface BookingInvoice {
   _id: string;
@@ -11,11 +15,22 @@ export interface BookingInvoice {
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
+  couponCode?: string;
+  discountPercent?: number;
+  discountAmount?: number;
   amountPaid?: number;
   balanceDue?: number;
+  /** Cash actually charged after discount (not the quote marker). */
   amountReceived?: number;
   paidAt?: string;
   razorpayPaymentId?: string;
+  paymentHistory?: {
+    amount: number;
+    type: string;
+    paidAt: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+  }[];
 }
 
 export interface BookingReschedule {
@@ -63,6 +78,8 @@ export interface Booking {
   paymentStatus?: 'paid' | 'unpaid';
   technicianNotes?: string;
   spareParts?: { name: string; quantity: number; unitCost: number }[];
+  /** Client reference photos (Cloudinary HTTPS URLs). */
+  serviceImages?: string[];
   rejectedBy?: (string | { _id: string })[];
   reschedule?: BookingReschedule;
 }
@@ -121,6 +138,53 @@ export const bookingService = {
       booking: Booking;
       invoice: { _id: string; totalAmount: number; invoiceNumber: string };
     }>;
+  },
+
+  async uploadServiceImages(
+    bookingId: string,
+    imageUris: string[]
+  ): Promise<Booking> {
+    const token = await getToken();
+    if (!token || token.startsWith('demo-token-')) {
+      throw new Error('Sign in to upload reference photos.');
+    }
+    if (!imageUris.length) {
+      throw new Error('No photos to upload');
+    }
+
+    const formData = new FormData();
+    imageUris.slice(0, 6).forEach((uri, index) => {
+      const filename = uri.split('/').pop() || `photo-${index + 1}.jpg`;
+      const ext = filename.split('.').pop()?.toLowerCase();
+      const mime =
+        ext === 'png'
+          ? 'image/png'
+          : ext === 'webp'
+            ? 'image/webp'
+            : 'image/jpeg';
+      formData.append('images', {
+        uri,
+        name: filename,
+        type: mime,
+      } as unknown as Blob);
+    });
+
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/images`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      message?: string;
+      booking?: Booking;
+    };
+
+    if (!response.ok || !data?.booking) {
+      throw new Error(data?.message || 'Could not upload photos');
+    }
+    return data.booking;
   },
 
   async getMyBookings(params?: { status?: string; page?: number; limit?: number }) {

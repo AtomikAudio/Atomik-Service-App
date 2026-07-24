@@ -7,6 +7,8 @@ import { formatINR, paymentBadgeVariant, paymentLabel } from '../../utils/paymen
 import {
   getClientSparePartsPayAmount,
   getInvoiceBalanceDue,
+  getInvoiceCashPaid,
+  getInvoiceDiscountAmount,
   isExtraPartsOnlyPayment,
 } from '../../utils/invoice';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
@@ -19,10 +21,28 @@ interface Props {
   payLabel?: string;
 }
 
-const Row = ({ label, value }: { label: string; value: string }) => (
+const Row = ({
+  label,
+  value,
+  emphasize,
+  muted,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+  muted?: boolean;
+}) => (
   <View style={styles.row}>
-    <Text style={styles.label}>{label}</Text>
-    <Text style={styles.value}>{value}</Text>
+    <Text style={[styles.label, muted && styles.mutedText]}>{label}</Text>
+    <Text
+      style={[
+        styles.value,
+        emphasize && styles.valueEmphasize,
+        muted && styles.mutedText,
+      ]}
+    >
+      {value}
+    </Text>
   </View>
 );
 
@@ -40,17 +60,28 @@ export const PaymentBreakdownCard: React.FC<Props> = ({
   const paid = balanceDue <= 0 && invoice.status === 'paid';
   const gstLabel = `GST (${Math.round((invoice.taxRate ?? 0.18) * 100)}%)`;
   const showPay = !!onPayPress && balanceDue > 0;
+  const discount = getInvoiceDiscountAmount(invoice);
+  const cashPaid = getInvoiceCashPaid(invoice);
+  const hasDiscount = discount > 0;
+  const discountLabel = invoice.couponCode
+    ? `Discount applied (${invoice.couponCode}${
+        invoice.discountPercent ? ` · ${invoice.discountPercent}%` : ''
+      })`
+    : invoice.discountPercent
+      ? `Discount applied (${invoice.discountPercent}%)`
+      : 'Discount applied';
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <Text style={styles.title}>Payment</Text>
+        <Text style={styles.title}>Bill</Text>
         <Badge
           label={paymentLabel(paid ? 'paid' : 'unpaid')}
           variant={paymentBadgeVariant(paid ? 'paid' : 'unpaid')}
         />
       </View>
       <Text style={styles.invoiceNo}>Invoice {invoice.invoiceNumber}</Text>
+
       {extraPartsOnly ? (
         <>
           <Row label="Extra parts (quoted)" value={formatINR(sparePreTax)} />
@@ -59,38 +90,81 @@ export const PaymentBreakdownCard: React.FC<Props> = ({
             value={formatINR(Math.max(0, extraDue - sparePreTax))}
           />
           <View style={styles.divider} />
-          <Row label="Extra parts due" value={formatINR(extraDue)} />
-          <Text style={styles.paidNote}>
-            Base invoice paid ({formatINR(invoice.amountPaid ?? 0)}).
-          </Text>
+          <Row label="Extra parts due" value={formatINR(extraDue)} emphasize />
+          {cashPaid > 0 ? (
+            <>
+              {hasDiscount ? (
+                <Row label={discountLabel} value={`− ${formatINR(discount)}`} />
+              ) : null}
+              <Row
+                label="Amount paid (base service)"
+                value={formatINR(cashPaid)}
+                emphasize
+              />
+            </>
+          ) : null}
         </>
       ) : (
         <>
           <Row label="Service charges" value={formatINR(invoice.serviceCharges)} />
-          <Row label="Technician charges" value={formatINR(invoice.technicianCharges)} />
+          {invoice.technicianCharges > 0 ? (
+            <Row
+              label="Technician charges"
+              value={formatINR(invoice.technicianCharges)}
+            />
+          ) : null}
           {sparePreTax > 0 ? (
-            <Row label="Spare parts" value={formatINR(sparePreTax)} />
+            <Row label="Extra parts" value={formatINR(sparePreTax)} />
           ) : null}
           <Row label={gstLabel} value={formatINR(invoice.taxAmount)} />
           <View style={styles.divider} />
-          <Row label="Total" value={formatINR(invoice.totalAmount)} />
-          {!paid && balanceDue > 0 && balanceDue < invoice.totalAmount ? (
+          <Row label="Quoted total" value={formatINR(invoice.totalAmount)} />
+          {hasDiscount ? (
+            <Row label={discountLabel} value={`− ${formatINR(discount)}`} />
+          ) : null}
+          {!paid && balanceDue > 0 ? (
             <>
-              <Row label="Already paid" value={formatINR(invoice.amountPaid ?? 0)} />
-              <Row label="Balance due" value={formatINR(balanceDue)} />
+              {cashPaid > 0 ? (
+                <Row label="Amount paid" value={formatINR(cashPaid)} emphasize />
+              ) : null}
+              <Row
+                label="Amount to pay"
+                value={formatINR(
+                  hasDiscount && cashPaid <= 0
+                    ? Math.max(0, invoice.totalAmount - discount)
+                    : balanceDue
+                )}
+                emphasize
+              />
             </>
           ) : null}
         </>
       )}
+
       {paid ? (
         <>
           <View style={styles.paidBox}>
-            <Text style={styles.paidLabel}>Amount received</Text>
-            <Text style={styles.paidAmount}>{formatINR(invoice.amountPaid)}</Text>
+            {hasDiscount ? (
+              <View style={styles.paidRow}>
+                <Text style={styles.paidLabel}>{discountLabel}</Text>
+                <Text style={styles.paidDiscount}>− {formatINR(discount)}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.paidLabel}>Amount paid</Text>
+            <Text style={styles.paidAmount}>{formatINR(cashPaid)}</Text>
+            {hasDiscount && cashPaid !== invoice.totalAmount ? (
+              <Text style={styles.paidHint}>
+                Quoted {formatINR(invoice.totalAmount)} · cash received{' '}
+                {formatINR(cashPaid)}
+              </Text>
+            ) : null}
           </View>
           {invoice.paidAt ? (
             <Text style={styles.meta}>
-              Paid on {new Date(invoice.paidAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+              Paid on{' '}
+              {new Date(invoice.paidAt).toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+              })}
             </Text>
           ) : null}
           {invoice.razorpayPaymentId ? (
@@ -102,7 +176,9 @@ export const PaymentBreakdownCard: React.FC<Props> = ({
           <Text style={styles.pendingNote}>
             {extraPartsOnly
               ? 'Pay only the extra parts balance below.'
-              : 'Awaiting client payment'}
+              : hasDiscount
+                ? 'Coupon applied — pay the discounted amount at checkout.'
+                : 'Awaiting client payment'}
           </Text>
           {showPay ? (
             <Button
@@ -147,16 +223,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
+    gap: 12,
   },
   label: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.gray,
+    flex: 1,
   },
   value: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 12,
     color: COLORS.white,
+  },
+  valueEmphasize: {
+    fontFamily: 'Montserrat_700Bold',
+    fontSize: 13,
+  },
+  mutedText: {
+    color: COLORS.ashGray,
   },
   divider: {
     height: 1,
@@ -171,16 +256,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.ashGrayBorder,
   },
+  paidRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
   paidLabel: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 11,
     color: COLORS.ashGray,
     marginBottom: 4,
+    flex: 1,
+  },
+  paidDiscount: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 13,
+    color: COLORS.ashGray,
   },
   paidAmount: {
     fontFamily: 'Montserrat_700Bold',
-    fontSize: 20,
+    fontSize: 22,
     color: COLORS.ashGray,
+  },
+  paidHint: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 10,
+    color: COLORS.ashGray,
+    marginTop: 8,
   },
   meta: {
     fontFamily: 'Montserrat_400Regular',
@@ -192,13 +296,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,
     color: COLORS.gray,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  paidNote: {
-    fontFamily: 'Montserrat_400Regular',
-    fontSize: 11,
-    color: COLORS.grayDark,
     marginTop: 8,
     fontStyle: 'italic',
   },

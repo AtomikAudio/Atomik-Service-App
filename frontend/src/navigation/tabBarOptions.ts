@@ -16,6 +16,7 @@ export function createTabBarScreenOptions(
     tabBarActiveTintColor: COLORS.red,
     tabBarInactiveTintColor: COLORS.grayDark,
     tabBarLabelStyle: tabStyles.label,
+    tabBarItemStyle: tabStyles.item,
     tabBarStyle: {
       backgroundColor: COLORS.surface,
       borderTopWidth: 1,
@@ -33,5 +34,8 @@ const tabStyles = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular',
     fontSize: 10,
     marginTop: 2,
+  },
+  item: {
+    flex: 1,
   },
 });

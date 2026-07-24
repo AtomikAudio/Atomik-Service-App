@@ -184,6 +184,36 @@ export const authService = {
     }));
   },
 
+  async listTechnicianAvailability(params?: {
+    scheduledDate?: string;
+    scheduledTime?: string;
+    excludeBookingId?: string;
+  }): Promise<Array<{ id: string; name: string; phone?: string; free: boolean; busyCount: number }>> {
+    const q = new URLSearchParams();
+    if (params?.scheduledDate) q.set('scheduledDate', params.scheduledDate.slice(0, 10));
+    if (params?.scheduledTime) q.set('scheduledTime', params.scheduledTime);
+    if (params?.excludeBookingId) q.set('excludeBookingId', params.excludeBookingId);
+    const qs = q.toString();
+    const raw = (await api.get(
+      `/auth/technicians/availability${qs ? `?${qs}` : ''}`
+    )) as {
+      technicians?: Array<{
+        id: string;
+        name: string;
+        phone?: string;
+        free: boolean;
+        busyCount?: number;
+      }>;
+    };
+    return (raw.technicians ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      phone: t.phone,
+      free: Boolean(t.free),
+      busyCount: t.busyCount ?? 0,
+    }));
+  },
+
   async sendOtp(
     phone: string,
     purpose: OtpPurpose = 'signup'

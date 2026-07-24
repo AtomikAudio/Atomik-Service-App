@@ -85,3 +85,60 @@ export const AudioTimelineIcon: React.FC<IconProps> = ({
     </Svg>
   );
 };
+
+/** Clear cost tiers — estimate bars with a total underline. */
+export const CostBreakdownIcon: React.FC<IconProps> = ({
+  size = 56,
+  color = '#ffffff',
+}) => (
+  <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <Rect x={10} y={14} width={44} height={8} rx={2} fill={color} opacity={0.35} />
+    <Rect x={10} y={28} width={32} height={8} rx={2} fill={color} opacity={0.65} />
+    <Rect x={10} y={42} width={20} height={8} rx={2} fill={color} />
+    <Path
+      d="M10 56 L54 56"
+      stroke={color}
+      strokeWidth={2.4}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
+/** Calendar + clock mark for smart scheduling. */
+export const SchedulePrecisionIcon: React.FC<IconProps> = ({
+  size = 56,
+  color = '#ffffff',
+}) => (
+  <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <Rect
+      x={10}
+      y={14}
+      width={44}
+      height={40}
+      rx={6}
+      stroke={color}
+      strokeWidth={3}
+    />
+    <Path d="M10 26 H54" stroke={color} strokeWidth={2.4} />
+    <Path
+      d="M22 10 V18"
+      stroke={color}
+      strokeWidth={3}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M42 10 V18"
+      stroke={color}
+      strokeWidth={3}
+      strokeLinecap="round"
+    />
+    <Circle cx={40} cy={42} r={10} stroke={color} strokeWidth={2.4} />
+    <Path
+      d="M40 37 V42 L44 44"
+      stroke={color}
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);

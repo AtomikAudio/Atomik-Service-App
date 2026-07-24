@@ -217,6 +217,7 @@ export const UpcomingServicesScreen: React.FC<Props> = ({ navigation }) => {
         confirmDestructive
         loading={deleting}
         icon="close-circle-outline"
+        showNoRefundPolicy
         onConfirm={confirmDeleteBooking}
         onCancel={() => {
           if (!deleting) setDeleteTarget(null);

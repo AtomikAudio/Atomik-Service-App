@@ -1,7 +1,9 @@
 import { Booking } from '../services/bookings';
 
-export const formatBookingStatus = (status: string): string =>
-  status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+export const formatBookingStatus = (status?: string | null): string => {
+  if (!status) return 'Unknown';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 /** Human-readable API service type label. */
 export const formatServiceTypeLabel = (serviceType?: string): string => {
@@ -56,3 +58,48 @@ export const getTechnicianFromBooking = (
 
 export const hasAssignedTechnician = (booking: Booking): boolean =>
   getTechnicianFromBooking(booking) !== null;
+
+export type AdminBookingTab =
+  | 'pending'
+  | 'ongoing'
+  | 'completed'
+  | 'cancelled';
+
+export const ADMIN_PENDING_STATUSES = ['pending', 'confirmed'] as const;
+export const ADMIN_ONGOING_STATUSES = [
+  'technician_assigned',
+  'en_route',
+  'arrived',
+  'in_progress',
+] as const;
+
+export const matchesAdminBookingTab = (
+  status: string | undefined | null,
+  tab: AdminBookingTab
+): boolean => {
+  if (!status) return false;
+  if (tab === 'pending') return (ADMIN_PENDING_STATUSES as readonly string[]).includes(status);
+  if (tab === 'ongoing') return (ADMIN_ONGOING_STATUSES as readonly string[]).includes(status);
+  if (tab === 'completed') return status === 'completed';
+  return status === 'cancelled';
+};
+
+/** Venue name + area/city for list cards. */
+export const formatVenuePlace = (venue: Booking['venueId']): string => {
+  if (!venue) return '—';
+  const parts = [venue.name, venue.area, venue.city].filter(Boolean);
+  return parts.length ? parts.join(', ') : '—';
+};
+
+/** Full address line for detail screens. */
+export const formatVenueAddress = (venue: Booking['venueId']): string => {
+  if (!venue) return '—';
+  const parts = [
+    venue.address,
+    venue.area,
+    venue.city,
+    venue.state,
+    venue.pincode,
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : formatVenuePlace(venue);
+};

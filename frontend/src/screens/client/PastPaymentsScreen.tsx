@@ -82,7 +82,21 @@ export const PastPaymentsScreen: React.FC<Props> = ({ navigation }) => {
               variant="confirmed"
             />
           </View>
-          <Text style={styles.amount}>₹{formatPaymentAmount(item.amount)}</Text>
+          <Text style={styles.amount}>
+            Amount paid ₹{formatPaymentAmount(item.amount)}
+          </Text>
+          {item.discountAmount &&
+          item.discountAmount > 0 &&
+          item.type !== 'extra_parts' ? (
+            <Text style={styles.discountHint}>
+              Discount applied
+              {item.couponCode ? ` (${item.couponCode})` : ''}: −₹
+              {formatPaymentAmount(item.discountAmount)}
+              {item.quotedTotal
+                ? ` · Quoted ₹${formatPaymentAmount(item.quotedTotal)}`
+                : ''}
+            </Text>
+          ) : null}
           <Text style={styles.paidAt}>
             Paid {formatDateTimeIST(item.paidAt)} IST
           </Text>
@@ -144,6 +158,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat_700Bold',
     fontSize: 18,
     color: COLORS.white,
+  },
+  discountHint: {
+    fontFamily: 'Montserrat_400Regular',
+    fontSize: 11,
+    color: COLORS.gray,
+    marginTop: 4,
   },
   paidAt: {
     fontFamily: 'SpaceMono_400Regular',

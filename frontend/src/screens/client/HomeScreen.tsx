@@ -191,42 +191,48 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </FadeIn>
 
         <FadeIn index={2} style={styles.statsRow}>
-          <PressableScale
-            onPress={() => navigation.navigate('UpcomingServices')}
-            style={styles.statPressable}
-            scaleTo={0.96}
-          >
-            <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>
-                {bookings.filter(
-                  (b) => !['completed', 'cancelled'].includes(b.status)
-                ).length}
-              </Text>
-              <Text style={styles.statLabel}>Upcoming{'\n'}Services</Text>
-            </Card>
-          </PressableScale>
-          <PressableScale
-            onPress={() => navigation.getParent()?.navigate('Payments')}
-            style={styles.statPressable}
-            scaleTo={0.96}
-          >
-            <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>{pendingCount}</Text>
-              <Text style={styles.statLabel}>Pending{'\n'}Payment</Text>
-            </Card>
-          </PressableScale>
-          <PressableScale
-            onPress={() => navigation.navigate('CompletedServices')}
-            style={styles.statPressable}
-            scaleTo={0.96}
-          >
-            <Card style={styles.statCard} padding={14}>
-              <Text style={styles.statNum}>
-                {bookings.filter((b) => b.status === 'completed').length}
-              </Text>
-              <Text style={styles.statLabel}>Completed{'\n'}Services</Text>
-            </Card>
-          </PressableScale>
+          <View style={styles.statWrap}>
+            <PressableScale
+              onPress={() => navigation.navigate('UpcomingServices')}
+              style={styles.statPressable}
+              scaleTo={0.96}
+            >
+              <Card style={styles.statCard} padding={14}>
+                <Text style={styles.statNum}>
+                  {bookings.filter(
+                    (b) => !['completed', 'cancelled'].includes(b.status)
+                  ).length}
+                </Text>
+                <Text style={styles.statLabel}>Upcoming{'\n'}Services</Text>
+              </Card>
+            </PressableScale>
+          </View>
+          <View style={styles.statWrap}>
+            <PressableScale
+              onPress={() => navigation.getParent()?.navigate('Payments')}
+              style={styles.statPressable}
+              scaleTo={0.96}
+            >
+              <Card style={styles.statCard} padding={14}>
+                <Text style={styles.statNum}>{pendingCount}</Text>
+                <Text style={styles.statLabel}>Pending{'\n'}Payment</Text>
+              </Card>
+            </PressableScale>
+          </View>
+          <View style={styles.statWrap}>
+            <PressableScale
+              onPress={() => navigation.navigate('CompletedServices')}
+              style={styles.statPressable}
+              scaleTo={0.96}
+            >
+              <Card style={styles.statCard} padding={14}>
+                <Text style={styles.statNum}>
+                  {bookings.filter((b) => b.status === 'completed').length}
+                </Text>
+                <Text style={styles.statLabel}>Completed{'\n'}Services</Text>
+              </Card>
+            </PressableScale>
+          </View>
         </FadeIn>
 
         <FadeIn index={3} style={styles.sectionHeader}>
@@ -409,6 +415,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         confirmDestructive
         loading={deleting}
         icon="close-circle-outline"
+        showNoRefundPolicy
         onConfirm={confirmDeleteBooking}
         onCancel={() => {
           if (!deleting) setDeleteTarget(null);
@@ -494,8 +501,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 22 },
-  statPressable: { flex: 1 },
-  statCard: { flex: 1 },
+  statWrap: { flex: 1, minWidth: 0 },
+  statPressable: { width: '100%' },
+  statCard: { width: '100%' },
   statNum: {
     fontFamily: 'Montserrat_700Bold',
     fontSize: 22,

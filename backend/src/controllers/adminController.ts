@@ -26,9 +26,13 @@ export const getDashboardStats = async (
       totalClients,
       totalTechnicians,
     ] = await Promise.all([
-      Booking.countDocuments(),
-      Booking.countDocuments({ status: 'pending' }),
-      Booking.countDocuments({ status: { $in: ['in_progress', 'en_route', 'arrived'] } }),
+      Booking.countDocuments({ status: { $ne: 'cancelled' } }),
+      Booking.countDocuments({ status: { $in: ['pending', 'confirmed'] } }),
+      Booking.countDocuments({
+        status: {
+          $in: ['technician_assigned', 'en_route', 'arrived', 'in_progress'],
+        },
+      }),
       Booking.countDocuments({ status: 'completed' }),
       Invoice.aggregate([
         { $match: { status: 'paid' } },

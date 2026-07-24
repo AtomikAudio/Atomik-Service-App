@@ -7,6 +7,7 @@ import {
   normalizeScheduledTime,
   parseScheduledDate,
   toISODateStringIST,
+  earliestBookableDateIST,
 } from '../utils/schedule';
 
 export type SlotStatus = 'available' | 'booked' | 'held_by_you' | 'held_by_other';
@@ -29,6 +30,17 @@ export function normalizeSlotDate(dateInput: string): string {
 export function normalizeSlotTime(time: string): string {
   const cleaned = time.replace(/\s*IST\s*$/i, '').trim();
   return normalizeScheduledTime(cleaned);
+}
+
+/** Same-day and past dates are not bookable — earliest is tomorrow IST. */
+export function assertBookableScheduleDate(dateInput: string): void {
+  const day = normalizeSlotDate(dateInput);
+  const earliest = earliestBookableDateIST();
+  if (day < earliest) {
+    throw new BadRequestError(
+      'Same-day slots are not available. Please choose a date from tomorrow onward.'
+    );
+  }
 }
 
 function secondsUntil(expiresAt: Date): number {
@@ -63,6 +75,7 @@ export async function assertRescheduleSlotAvailable(
   scheduledTime: string,
   excludeBookingId: string
 ): Promise<void> {
+  assertBookableScheduleDate(scheduledDate);
   const normalizedTime = normalizeSlotTime(scheduledTime);
   const cleaned = normalizedTime.replace(/\s*IST\s*$/i, '').trim();
   if (!(BOOKING_TIME_SLOTS as readonly string[]).includes(cleaned)) {
@@ -178,6 +191,8 @@ export async function holdSlot(
   const scheduledTime = normalizeSlotTime(timeInput);
   const clientOid = toObjectId(clientId);
 
+  assertBookableScheduleDate(scheduledDate);
+
   if (await isSlotBooked(scheduledDate, scheduledTime)) {
     throw new BadRequestError('This slot is already booked');
   }
@@ -221,6 +236,8 @@ export async function assertValidHoldForBooking(
   await purgeExpiredHolds();
   const scheduledDate = normalizeSlotDate(dateInput);
   const scheduledTime = normalizeSlotTime(timeInput);
+
+  assertBookableScheduleDate(scheduledDate);
 
   if (await isSlotBooked(scheduledDate, scheduledTime)) {
     throw new BadRequestError('This time slot is no longer available');

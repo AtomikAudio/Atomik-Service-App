@@ -24,6 +24,7 @@ import {
 import { emitBookingChanged } from '../services/liveUpdates';
 import { navigateToBookingFromNotification } from './navigateFromNotification';
 import { ClientLiveEvents } from '../components/client/ClientLiveEvents';
+import { AdminLiveEvents } from '../components/admin/AdminLiveEvents';
 import { ServiceStatusOverlay } from '../components/common/ServiceStatusOverlay';
 
 const Stack = createNativeStackNavigator();
@@ -50,7 +51,8 @@ export const AppNavigator: React.FC = () => {
           navigate: nav.navigate.bind(nav) as any,
         },
         user?.role,
-        String(bookingId)
+        String(bookingId),
+        { fromRoot: true }
       );
     });
     return () => sub.remove();
@@ -86,6 +88,12 @@ export const AppNavigator: React.FC = () => {
         navigationRef={navigationRef}
         enabled={
           isAuthenticated && isOnboarded && user?.role === 'client'
+        }
+      />
+      <AdminLiveEvents
+        navigationRef={navigationRef}
+        enabled={
+          isAuthenticated && isOnboarded && user?.role === 'admin'
         }
       />
       <Stack.Navigator screenOptions={rootStackOptions}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthUser } from '../../services/auth';
+import { AuthUser, authService } from '../../services/auth';
 import { COLORS } from '../../constants/colors';
+import { TechAvailabilityBadge } from '../common/TechAvailabilityBadge';
+import { subscribeBookingChanged } from '../../services/liveUpdates';
 
 interface Props {
   technicians: AuthUser[];
@@ -18,6 +20,9 @@ interface Props {
   onChange: (technicianId: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  excludeBookingId?: string;
 }
 
 export const TechnicianSelect: React.FC<Props> = ({
@@ -26,9 +31,43 @@ export const TechnicianSelect: React.FC<Props> = ({
   onChange,
   placeholder = 'Select technician',
   disabled = false,
+  scheduledDate,
+  scheduledTime,
+  excludeBookingId,
 }) => {
   const [open, setOpen] = useState(false);
+  const [freeById, setFreeById] = useState<Record<string, boolean>>({});
   const selected = technicians.find((t) => t.id === value);
+
+  const loadAvailability = useCallback(async () => {
+    try {
+      const rows = await authService.listTechnicianAvailability({
+        scheduledDate,
+        scheduledTime,
+        excludeBookingId,
+      });
+      const next: Record<string, boolean> = {};
+      for (const row of rows) next[row.id] = row.free;
+      setFreeById(next);
+    } catch {
+      // Keep last known map; badge simply omits if missing.
+    }
+  }, [scheduledDate, scheduledTime, excludeBookingId]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    void loadAvailability();
+    const interval = setInterval(() => {
+      void loadAvailability();
+    }, 15000);
+    const unsubscribe = subscribeBookingChanged(() => {
+      void loadAvailability();
+    });
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [open, loadAvailability]);
 
   return (
     <View>
@@ -60,6 +99,8 @@ export const TechnicianSelect: React.FC<Props> = ({
                 style={styles.list}
                 renderItem={({ item }) => {
                   const active = item.id === value;
+                  const free =
+                    item.id in freeById ? freeById[item.id] : null;
                   return (
                     <TouchableOpacity
                       style={[styles.option, active && styles.optionActive]}
@@ -68,12 +109,22 @@ export const TechnicianSelect: React.FC<Props> = ({
                         setOpen(false);
                       }}
                     >
-                      <Text style={[styles.optionText, active && styles.optionTextActive]}>
-                        {item.name}
-                      </Text>
-                      {item.phone ? (
-                        <Text style={styles.optionSub}>{item.phone}</Text>
-                      ) : null}
+                      <View style={styles.optionRow}>
+                        <View style={styles.optionMain}>
+                          <Text
+                            style={[
+                              styles.optionText,
+                              active && styles.optionTextActive,
+                            ]}
+                          >
+                            {item.name}
+                          </Text>
+                          {item.phone ? (
+                            <Text style={styles.optionSub}>{item.phone}</Text>
+                          ) : null}
+                        </View>
+                        <TechAvailabilityBadge free={free} />
+                      </View>
                     </TouchableOpacity>
                   );
                 }}
@@ -135,6 +186,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   optionActive: { backgroundColor: COLORS.redMuted },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  optionMain: { flex: 1, minWidth: 0 },
   optionText: {
     fontFamily: 'Montserrat_600SemiBold',
     fontSize: 14,

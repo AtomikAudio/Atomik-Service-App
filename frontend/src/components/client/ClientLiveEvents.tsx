@@ -1,38 +1,43 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NavigationContainerRef } from '@react-navigation/native';
 
 import { bookingService } from '../../services/bookings';
+import { reviewService } from '../../services/reviews';
 import { resolveAssignedTechnicianId } from '../../utils/technicianBooking';
 import { emitBookingChanged } from '../../services/liveUpdates';
 import { navigateToBookingFromNotification } from '../../navigation/navigateFromNotification';
-import { ThemedConfirmModal } from '../common/ThemedConfirmModal';
+import {
+  hasRatedBooking,
+  markBookingRated,
+  markRatingSkipped,
+  shouldPromptRating,
+} from '../../utils/ratingPrompt';
+import {
+  ThemedAlertModal,
+  ThemedConfirmModal,
+} from '../common/ThemedConfirmModal';
+import { RateTechnicianModal } from './RateTechnicianModal';
 
 /**
  * Near-instant live updates for clients, without waiting on push delivery.
  *
- * Push notifications remain the ideal instant channel, but they can be delayed
- * or (on Android without FCM credentials) undelivered. This watcher polls the
- * client's bookings on a tight interval, and whenever anything changes it
- * broadcasts so every focused screen refetches immediately — so the UI updates
- * without the user switching tabs.
- *
- * It also detects "technician assigned" / "technician dropped" transitions and
- * surfaces a branded box on top of any screen. The last-seen state is persisted,
- * so a change that happened while the app was closed is announced on next open.
+ * Detects technician assigned / dropped / service completed transitions and
+ * surfaces branded dialogs. After "Service completed", the rate-technician
+ * dialog is queued next.
  */
 const POLL_MS = 15000;
-// When the API rate-limits us (429), stop hammering it for a while.
 const RATE_LIMIT_BACKOFF_MS = 90000;
 const SNAPSHOT_KEY = 'atomik_booking_snapshot_v1';
-const MAX_QUEUED_EVENTS = 3;
+const COMPLETED_SEEN_KEY = 'atomik_completed_dialog_seen_v1';
+const MAX_QUEUED_EVENTS = 6;
 
 type Snapshot = Record<string, { t: string | null; s: string }>;
 
 interface LiveEvent {
   bookingId: string;
-  kind: 'assigned' | 'dropped';
+  kind: 'assigned' | 'dropped' | 'completed' | 'rate';
   techName?: string;
   service?: string;
 }
@@ -49,12 +54,43 @@ function formatService(service?: string): string {
   return service.replace(/[_-]+/g, ' ').trim() || 'service';
 }
 
+async function hasSeenCompletedDialog(bookingId: string): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(COMPLETED_SEEN_KEY);
+    if (!raw) return false;
+    const ids = JSON.parse(raw) as unknown;
+    return Array.isArray(ids) && ids.includes(bookingId);
+  } catch {
+    return false;
+  }
+}
+
+async function markCompletedDialogSeen(bookingId: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(COMPLETED_SEEN_KEY);
+    const ids: string[] = raw ? (JSON.parse(raw) as string[]) : [];
+    if (!Array.isArray(ids)) {
+      await AsyncStorage.setItem(COMPLETED_SEEN_KEY, JSON.stringify([bookingId]));
+      return;
+    }
+    if (ids.includes(bookingId)) return;
+    ids.push(bookingId);
+    await AsyncStorage.setItem(
+      COMPLETED_SEEN_KEY,
+      JSON.stringify(ids.slice(-100))
+    );
+  } catch {
+    // ignore
+  }
+}
+
 export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) => {
   const snapshotRef = useRef<Snapshot | null>(null);
   const queueRef = useRef<LiveEvent[]>([]);
   const busyRef = useRef(false);
   const backoffUntilRef = useRef(0);
   const [current, setCurrent] = useState<LiveEvent | null>(null);
+  const [ratingLoading, setRatingLoading] = useState(false);
 
   const showNext = useCallback(() => {
     setCurrent((cur) => (cur ? cur : queueRef.current.shift() ?? null));
@@ -63,10 +99,40 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
   const enqueue = useCallback(
     (ev: LiveEvent) => {
       if (queueRef.current.length >= MAX_QUEUED_EVENTS) return;
+      if (queueRef.current.some((q) => q.bookingId === ev.bookingId && q.kind === ev.kind)) {
+        return;
+      }
+      if (current?.bookingId === ev.bookingId && current.kind === ev.kind) return;
       queueRef.current.push(ev);
       showNext();
     },
-    [showNext]
+    [current, showNext]
+  );
+
+  const enqueueCompletedFlow = useCallback(
+    async (
+      bookingId: string,
+      techName: string | undefined,
+      service: string | undefined
+    ) => {
+      if (!(await hasSeenCompletedDialog(bookingId))) {
+        enqueue({
+          bookingId,
+          kind: 'completed',
+          techName,
+          service,
+        });
+      }
+      if (await shouldPromptRating(bookingId)) {
+        enqueue({
+          bookingId,
+          kind: 'rate',
+          techName,
+          service,
+        });
+      }
+    },
+    [enqueue]
   );
 
   const poll = useCallback(async () => {
@@ -98,9 +164,27 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
             });
           } else if (active && prevEntry.t && !techNow) {
             enqueue({ bookingId: id, kind: 'dropped', service: b.serviceType });
+          } else if (
+            prevEntry.s !== 'completed' &&
+            status === 'completed' &&
+            techNow
+          ) {
+            await enqueueCompletedFlow(
+              id,
+              b.technicianId?.name,
+              b.serviceType
+            );
           }
         } else if (prev) {
           changed = true;
+          // App opened after completion while offline — announce once.
+          if (status === 'completed' && techNow) {
+            await enqueueCompletedFlow(
+              id,
+              b.technicianId?.name,
+              b.serviceType
+            );
+          }
         }
       }
 
@@ -118,18 +202,15 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
         () => {}
       );
 
-      // Broadcast so every focused screen refetches right away.
       if (changed) emitBookingChanged();
     } catch (err: any) {
-      // Back off hard on rate limiting so we stop compounding the problem.
       if (err?.status === 429) {
         backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
       }
-      // Otherwise transient — keep the last snapshot and retry next tick.
     } finally {
       busyRef.current = false;
     }
-  }, [enabled, enqueue]);
+  }, [enabled, enqueue, enqueueCompletedFlow]);
 
   useEffect(() => {
     if (!enabled) {
@@ -168,8 +249,6 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     const appStateSub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
-        // Only poll while the app is in the foreground — background timers just
-        // burn API quota (and battery) for updates the user can't see.
         if (state === 'active') {
           void poll();
           startInterval();
@@ -191,6 +270,48 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
     setTimeout(showNext, 250);
   }, [showNext]);
 
+  const handleCompletedClose = useCallback(() => {
+    const ev = current;
+    if (ev?.kind === 'completed') {
+      void markCompletedDialogSeen(ev.bookingId);
+    }
+    handleClose();
+  }, [current, handleClose]);
+
+  const handleRateDismiss = useCallback(async () => {
+    const ev = current;
+    if (ev?.kind === 'rate' && !(await hasRatedBooking(ev.bookingId))) {
+      await markRatingSkipped(ev.bookingId);
+    }
+    handleClose();
+  }, [current, handleClose]);
+
+  const handleSubmitRating = useCallback(
+    async (rating: number) => {
+      if (!current || current.kind !== 'rate') return;
+      setRatingLoading(true);
+      try {
+        if (await hasRatedBooking(current.bookingId)) {
+          return;
+        }
+        const existing = await reviewService.getForBooking(current.bookingId);
+        if (existing.reviewed) {
+          await markBookingRated(current.bookingId);
+          return;
+        }
+        await reviewService.submit(current.bookingId, rating);
+        await markBookingRated(current.bookingId);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Could not submit rating';
+        Alert.alert('Rating failed', msg);
+        throw e;
+      } finally {
+        setRatingLoading(false);
+      }
+    },
+    [current]
+  );
+
   const handleViewMore = useCallback(() => {
     const ev = current;
     setCurrent(null);
@@ -202,13 +323,43 @@ export const ClientLiveEvents: React.FC<Props> = ({ navigationRef, enabled }) =>
           navigate: nav.navigate.bind(nav) as (...args: any[]) => void,
         },
         'client',
-        ev.bookingId
+        ev.bookingId,
+        { fromRoot: true }
       );
     }
     setTimeout(showNext, 400);
   }, [current, navigationRef, showNext]);
 
   if (!current) return null;
+
+  if (current.kind === 'rate') {
+    return (
+      <RateTechnicianModal
+        visible
+        technicianName={current.techName || 'your technician'}
+        loading={ratingLoading}
+        onSubmit={handleSubmitRating}
+        onDismiss={() => {
+          void handleRateDismiss();
+        }}
+      />
+    );
+  }
+
+  if (current.kind === 'completed') {
+    const service = formatService(current.service);
+    const tech = current.techName?.trim() || 'Your technician';
+    return (
+      <ThemedAlertModal
+        visible
+        title="Service completed"
+        message={`${tech} has completed your ${service} booking. Thank you for choosing ATOMIK.`}
+        buttonLabel="OKAY"
+        icon="checkmark-circle-outline"
+        onClose={handleCompletedClose}
+      />
+    );
+  }
 
   const assigned = current.kind === 'assigned';
   const service = formatService(current.service);

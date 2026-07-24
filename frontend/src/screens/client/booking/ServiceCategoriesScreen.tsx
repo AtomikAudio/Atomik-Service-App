@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
+import { ThemedConfirmModal } from '../../../components/common/ThemedConfirmModal';
 import {
   EXTRA_PARTS_CHARGE_NOTE,
+  GENERAL_SERVICE_PRICE,
+  GENERAL_VISIT_PRICE,
   SERVICE_GROUPS,
 } from '../../../constants/audioServices';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
@@ -27,9 +30,17 @@ interface Props {
   route?: { params?: { preselect?: string; reset?: boolean } };
 }
 
+type PendingAction =
+  | { kind: 'group'; groupId: string; hasSubmenu: boolean }
+  | { kind: 'preselect'; value: 'general-visit' | 'general-service' };
+
 function bookingSortKey(b: Booking): number {
   const d = new Date(b.scheduledDate).getTime();
   return Number.isFinite(d) ? d : Number.MAX_SAFE_INTEGER;
+}
+
+function isActiveUpcoming(b: Booking): boolean {
+  return !['completed', 'cancelled'].includes(b.status);
 }
 
 export const ServiceCategoriesScreen: React.FC<Props> = ({
@@ -40,49 +51,110 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
   const preselect = route?.params?.preselect;
   const [upcomingOpen, setUpcomingOpen] = useState(false);
   const [latestUpcoming, setLatestUpcoming] = useState<Booking | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
+    null
+  );
 
-  useEffect(() => {
-    if (route?.params?.reset) resetDraft();
-    if (preselect === 'general-visit') {
-      addCategory('general-visit');
-      // Use navigate (not replace) so Back returns to Categories, not Home.
-      navigation.navigate('PlaceOrder');
-    } else if (preselect === 'general-service') {
-      navigation.navigate('ServiceSubcategories');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadLatestUpcoming = useCallback(async () => {
+  const loadLatestUpcoming = useCallback(async (): Promise<Booking | null> => {
     try {
       const bookings = await bookingService.getMyBookings({ limit: 20 });
       const upcoming = bookings
-        .filter((b) => !['completed', 'cancelled'].includes(b.status))
+        .filter(isActiveUpcoming)
         .sort((a, b) => bookingSortKey(a) - bookingSortKey(b));
-      setLatestUpcoming(upcoming[0] ?? null);
+      const next = upcoming[0] ?? null;
+      setLatestUpcoming(next);
+      return next;
     } catch {
       setLatestUpcoming(null);
+      return null;
     }
   }, []);
 
+  const proceedAction = useCallback(
+    (action: PendingAction) => {
+      if (action.kind === 'group') {
+        if (action.hasSubmenu) {
+          navigation.navigate('ServiceSubcategories', {
+            kind: action.groupId,
+          });
+        } else {
+          addCategory(action.groupId);
+          navigation.navigate('PlaceOrder');
+        }
+        return;
+      }
+      navigation.navigate('ServiceSubcategories', { kind: action.value });
+    },
+    [addCategory, navigation]
+  );
+
+  const requestBook = useCallback(
+    (action: PendingAction, existing: Booking | null) => {
+      if (existing) {
+        setPendingAction(action);
+        return;
+      }
+      proceedAction(action);
+    },
+    [proceedAction]
+  );
+
   useFocusEffect(
     useCallback(() => {
-      loadLatestUpcoming();
-    }, [loadLatestUpcoming])
+      let cancelled = false;
+
+      if (route?.params?.reset) {
+        resetDraft();
+      }
+
+      const incomingPreselect = route?.params?.preselect;
+      // Consume one-shot params so remount/refocus does not auto-repeat.
+      if (route?.params?.reset || incomingPreselect) {
+        navigation.setParams?.({ reset: undefined, preselect: undefined });
+      }
+
+      void (async () => {
+        const existing = await loadLatestUpcoming();
+        if (cancelled) return;
+
+        if (
+          incomingPreselect === 'general-visit' ||
+          incomingPreselect === 'general-service'
+        ) {
+          requestBook(
+            { kind: 'preselect', value: incomingPreselect },
+            existing
+          );
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      loadLatestUpcoming,
+      navigation,
+      requestBook,
+      resetDraft,
+      route?.params?.preselect,
+      route?.params?.reset,
+    ])
   );
 
   const onSelectGroup = (groupId: string, hasSubmenu: boolean) => {
-    if (hasSubmenu) {
-      navigation.navigate('ServiceSubcategories');
-    } else {
-      addCategory(groupId);
-      navigation.navigate('PlaceOrder');
-    }
+    requestBook({ kind: 'group', groupId, hasSubmenu }, latestUpcoming);
   };
 
   const tech = latestUpcoming
     ? getTechnicianFromBooking(latestUpcoming)
     : null;
+
+  const confirmMessage = latestUpcoming
+    ? `Are you sure you want to book another service? You have already booked a service for ${formatBookingSchedule(
+        latestUpcoming.scheduledDate,
+        latestUpcoming.scheduledTime
+      )}.`
+    : 'Are you sure you want to book another service?';
 
   return (
     <View style={styles.container}>
@@ -113,11 +185,26 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>{group.label}</Text>
               <Text style={styles.cardDesc}>{group.description}</Text>
-              {group.hasSubmenu && (
-                <Text style={styles.cardMeta}>
-                  Tuning · Amplifier Rack · Damage Check
-                </Text>
-              )}
+              {group.id === 'general-service' ? (
+                <>
+                  <Text style={styles.cardMeta}>
+                    {GENERAL_SERVICE_PRICE} + GST
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    Tuning · Amplifier Rack · Damage Check
+                  </Text>
+                </>
+              ) : null}
+              {group.id === 'general-visit' ? (
+                <>
+                  <Text style={styles.cardMeta}>
+                    {GENERAL_VISIT_PRICE} + GST
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    Assessment · Diagnostics · Recommendations
+                  </Text>
+                </>
+              ) : null}
             </View>
             <Ionicons
               name="chevron-forward"
@@ -186,6 +273,21 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
           <Text style={styles.chargeNoteText}>{EXTRA_PARTS_CHARGE_NOTE}</Text>
         </View>
       </ScrollView>
+
+      <ThemedConfirmModal
+        visible={!!pendingAction}
+        title="Book another service?"
+        message={confirmMessage}
+        confirmLabel="YES, CONTINUE"
+        cancelLabel="GO BACK"
+        icon="calendar-outline"
+        onConfirm={() => {
+          const action = pendingAction;
+          setPendingAction(null);
+          if (action) proceedAction(action);
+        }}
+        onCancel={() => setPendingAction(null)}
+      />
     </View>
   );
 };

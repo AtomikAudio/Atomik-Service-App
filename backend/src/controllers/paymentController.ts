@@ -15,6 +15,7 @@ import { settleInvoicePayment } from '../services/paymentSettlement';
 import {
   getExtraPartsChargeAmount,
   getInvoiceBalanceDue,
+  getInvoiceCashReceived,
   shouldPayExtraPartsOnly,
   ensureInvoiceReflectsBookingSpareParts,
   buildPaymentHistoryForClient,
@@ -509,10 +510,19 @@ export const getMyInvoices = async (
           razorpayPaymentId: entry.razorpayPaymentId,
         })
       );
+      const amountReceived = getInvoiceCashReceived({
+        ...obj,
+        amountPaid,
+        paymentHistory,
+      });
       return {
         ...obj,
         amountPaid,
         balanceDue,
+        amountReceived,
+        discountAmount: Math.max(0, obj.discountAmount ?? 0),
+        discountPercent: obj.discountPercent ?? 0,
+        couponCode: obj.couponCode || undefined,
         paymentHistory,
       };
     });

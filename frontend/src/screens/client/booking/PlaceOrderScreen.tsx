@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { BookingFlowHeader } from '../../../components/booking/BookingFlowHeader';
 import { OrderActionRow } from '../../../components/booking/OrderActionRow';
+import { NoRefundPolicyNote } from '../../../components/common/NoRefundPolicyNote';
 import { useBookingDraft } from '../../../context/BookingDraftContext';
 import { getServiceById } from '../../../constants/audioServices';
 import { bookingService } from '../../../services/bookings';
@@ -158,6 +159,21 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         scheduledTime: formatBookingTime(draft.scheduledTime!),
         notes: notesParts.join('\n'),
       });
+
+      if (draft.photos.length > 0) {
+        try {
+          await bookingService.uploadServiceImages(booking._id, draft.photos);
+        } catch (uploadErr: unknown) {
+          const msg =
+            uploadErr instanceof Error
+              ? uploadErr.message
+              : 'Photos could not be uploaded';
+          Alert.alert(
+            'Order placed',
+            `Booking created, but reference photos failed: ${msg}. You can continue to payment.`
+          );
+        }
+      }
 
       setModalVisible(false);
       // Keep draft (details + timer) so Payment back restores Place Order.
@@ -319,8 +335,11 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
         )}
 
         <Text style={styles.disclaimer}>
-          Parts & labour beyond base scope are chargeable. GST applied at
-          checkout.
+          {isGeneralVisit
+            ? 'General Visit ₹3,500 + 18% GST. Parts beyond visit scope are chargeable separately.'
+            : isGeneralService
+              ? 'General Service ₹15,000 + 18% GST. Parts & labour beyond package scope are chargeable separately.'
+              : 'Parts & labour beyond base scope are chargeable. GST (18%) applied at checkout.'}
         </Text>
       </ScrollView>
 
@@ -374,6 +393,7 @@ export const PlaceOrderScreen: React.FC<Props> = ({ navigation }) => {
             <TouchableOpacity onPress={() => setModalVisible(false)}>
               <Text style={styles.cancelModal}>Cancel</Text>
             </TouchableOpacity>
+            <NoRefundPolicyNote style={styles.modalPolicy} />
           </View>
         </View>
       </Modal>
@@ -586,5 +606,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.gray,
     paddingVertical: 8,
+  },
+  modalPolicy: {
+    marginTop: 16,
   },
 });

@@ -16,6 +16,10 @@ type InvoiceLike =
       amountPaid?: number;
       paidAt?: Date;
       razorpayPaymentId?: string;
+      couponCode?: string;
+      discountPercent?: number;
+      discountAmount?: number;
+      paymentHistory?: InvoicePaymentEntry[];
     }
   | string
   | null
@@ -146,6 +150,7 @@ export function buildPaymentHistoryForClient(invoice: {
   paymentHistory?: InvoicePaymentEntry[];
   amountPaid?: number;
   totalAmount?: number;
+  discountAmount?: number;
   status?: string;
   paidAt?: Date | string;
   spareParts?: number;
@@ -182,6 +187,14 @@ export function buildPaymentHistoryForClient(invoice: {
   }
   if (amountPaid <= 0) return [];
 
+  const discount = Math.max(0, invoice.discountAmount ?? 0);
+  const total = invoice.totalAmount ?? 0;
+  /** Exact cash charged for settled invoices (quote marker minus coupon). */
+  const cashTotal =
+    discount > 0 && amountPaid >= total && total > 0
+      ? Math.max(0, Math.round((total - discount) * 100) / 100)
+      : amountPaid;
+
   const baseTotal = getBaseServiceTotal(invoice);
   const sparePreTax = invoice.spareParts ?? 0;
   const taxRate = invoice.taxRate ?? 0.18;
@@ -195,16 +208,24 @@ export function buildPaymentHistoryForClient(invoice: {
     razorpayOrderId: invoice.razorpayOrderId,
   };
 
-  if (spareWithTax > 0 && amountPaid > baseTotal) {
+  if (spareWithTax > 0 && cashTotal > baseTotal) {
+    const baseCash =
+      discount > 0
+        ? Math.max(0, Math.round((baseTotal - discount) * 100) / 100)
+        : baseTotal;
+    const extraCash = Math.max(
+      0,
+      Math.round((cashTotal - baseCash) * 100) / 100
+    );
     const entries: InvoicePaymentEntry[] = [
       {
-        amount: baseTotal,
+        amount: baseCash,
         type: 'base_service',
         paidAt,
         ...legacyRef,
       },
       {
-        amount: Math.min(amountPaid - baseTotal, spareWithTax),
+        amount: Math.min(extraCash, spareWithTax),
         type: 'extra_parts',
         paidAt,
         ...legacyRef,
@@ -216,7 +237,7 @@ export function buildPaymentHistoryForClient(invoice: {
   if (sparePreTax > 0) {
     return [
       {
-        amount: amountPaid,
+        amount: cashTotal,
         type: 'full',
         paidAt,
         ...legacyRef,
@@ -226,7 +247,7 @@ export function buildPaymentHistoryForClient(invoice: {
 
   return [
     {
-      amount: amountPaid,
+      amount: cashTotal,
       type: 'base_service',
       paidAt,
       ...legacyRef,
@@ -240,6 +261,28 @@ export function derivePaymentStatus(invoice: InvoiceLike): PaymentStatus {
   return invoice.status === 'paid' ? 'paid' : 'unpaid';
 }
 
+/** Cash actually charged (after coupon), not the ledger settlement marker. */
+export function getInvoiceCashReceived(invoice: InvoiceLike): number {
+  if (!invoice || typeof invoice === 'string') return 0;
+
+  const history = invoice.paymentHistory ?? [];
+  if (history.length > 0) {
+    return Math.round(
+      history.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) * 100
+    ) / 100;
+  }
+
+  const total = invoice.totalAmount ?? 0;
+  const discount = Math.max(0, invoice.discountAmount ?? 0);
+  const paidMarker = invoice.amountPaid ?? 0;
+
+  if (discount > 0 && paidMarker >= total && total > 0) {
+    return Math.max(0, Math.round((total - discount) * 100) / 100);
+  }
+
+  return paidMarker;
+}
+
 export function invoiceBreakdownForAdmin(invoice: InvoiceLike) {
   if (!invoice || typeof invoice === 'string') return null;
 
@@ -249,6 +292,11 @@ export function invoiceBreakdownForAdmin(invoice: InvoiceLike) {
   }
   const settled = amountPaid >= (invoice.totalAmount ?? 0) && invoice.status === 'paid';
   const balanceDue = getInvoiceBalanceDue({ ...invoice, amountPaid });
+  const discountAmount = Math.max(0, invoice.discountAmount ?? 0);
+  const amountReceived = getInvoiceCashReceived({
+    ...invoice,
+    amountPaid,
+  });
 
   return {
     _id: String(invoice._id),
@@ -260,9 +308,16 @@ export function invoiceBreakdownForAdmin(invoice: InvoiceLike) {
     taxRate: invoice.taxRate ?? 0.18,
     taxAmount: invoice.taxAmount ?? 0,
     totalAmount: invoice.totalAmount ?? 0,
+    couponCode: invoice.couponCode || undefined,
+    discountPercent: invoice.discountPercent ?? 0,
+    discountAmount,
     amountPaid,
     balanceDue,
-    amountReceived: settled ? invoice.totalAmount ?? 0 : invoice.amountPaid ?? 0,
+    amountReceived: settled || amountReceived > 0 ? amountReceived : amountPaid,
+    paymentHistory: buildPaymentHistoryForClient({
+      ...invoice,
+      amountPaid,
+    }),
     paidAt: invoice.paidAt,
     razorpayPaymentId: invoice.razorpayPaymentId,
   };
@@ -276,10 +331,15 @@ export function serializeBookingForRole(booking: any, role: string) {
 
   obj.paymentStatus = derivePaymentStatus(inv);
 
-  if (role === 'admin' || role === 'client') {
+  // Full bill (quote, extra parts, discount, cash received) for everyone who
+  // can open the booking detail — including technicians / master.
+  if (
+    role === 'admin' ||
+    role === 'client' ||
+    role === 'technician' ||
+    role === 'master_technician'
+  ) {
     obj.invoice = invoiceBreakdownForAdmin(inv);
-  } else if (role === 'technician' || role === 'master_technician') {
-    delete obj.invoiceId;
   }
 
   return obj;

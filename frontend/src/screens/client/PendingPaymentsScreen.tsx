@@ -247,6 +247,7 @@ export const PendingPaymentsScreen: React.FC<Props> = ({ navigation }) => {
         confirmDestructive
         loading={cancelling}
         icon="close-circle-outline"
+        showNoRefundPolicy
         onConfirm={confirmCancel}
         onCancel={() => {
           if (!cancelling) setCancelTarget(null);

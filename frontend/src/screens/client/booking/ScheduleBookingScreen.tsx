@@ -89,7 +89,7 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     const parsed = parseDraftScheduleDate(draft.scheduledDate);
-    if (parsed) {
+    if (parsed && !isPastISTDate(parsed.year, parsed.month, parsed.day)) {
       setYear(parsed.year);
       setMonth(parsed.month);
       setSelectedDay(parsed.day);
@@ -236,6 +236,9 @@ export const ScheduleBookingScreen: React.FC<Props> = ({ navigation }) => {
         ) : null}
 
         <Text style={styles.tz}>TIMEZONE: IST (Asia/Kolkata)</Text>
+        <Text style={styles.hint}>
+          Earliest booking is tomorrow — same-day slots are not available.
+        </Text>
         <View style={styles.calendar}>
           <View style={styles.calHeader}>
             <TouchableOpacity
@@ -376,7 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: COLORS.red,
     letterSpacing: 1,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   calendar: {
     backgroundColor: COLORS.surface,
@@ -385,6 +388,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     padding: 14,
     marginBottom: 24,
+    marginTop: 12,
   },
   calHeader: {
     flexDirection: 'row',

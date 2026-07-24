@@ -38,7 +38,7 @@ export const SERVICE_GROUPS: ServiceGroup[] = [
     icon: 'navigate-outline',
     description:
       'On-site audio assessment, diagnostics, and recommendations',
-    hasSubmenu: false,
+    hasSubmenu: true,
     apiType: 'inspection',
   },
 ];
@@ -148,8 +148,41 @@ export const GENERAL_SERVICE_INCLUSIONS: {
   },
 ];
 
-/** Fixed subtotal shown on the General Service screen. */
+/** Fixed subtotal shown on the General Service screen (pre-GST). */
 export const GENERAL_SERVICE_PRICE = '₹15,000';
+
+/** Fixed General Visit price (pre-GST) — matches backend inspection pricing. */
+export const GENERAL_VISIT_PRICE = '₹3,500';
+
+/** What the General Visit package includes (display-only, not selectable). */
+export const GENERAL_VISIT_INCLUSIONS: {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+}[] = [
+  {
+    id: 'site-assessment',
+    label: 'On-site System Assessment',
+    description:
+      'Walkthrough of your audio setup, room layout, and current performance.',
+    icon: 'walk-outline',
+  },
+  {
+    id: 'diagnostics',
+    label: 'Diagnostics & Fault Checks',
+    description:
+      'Signal path, amp, and speaker checks to identify issues before service.',
+    icon: 'pulse-outline',
+  },
+  {
+    id: 'recommendations',
+    label: 'Recommendations & Next Steps',
+    description:
+      'Clear guidance on repairs, upgrades, or a full General Service if needed.',
+    icon: 'clipboard-outline',
+  },
+];
 
 /** @deprecated Not shown on Categories screen — select via General Service → Others */
 export const OTHERS_SERVICE_GROUP: ServiceGroup = {
@@ -167,7 +200,7 @@ export const GENERAL_VISIT_ITEM: AudioServiceItem = {
   icon: 'navigate-outline',
   apiType: 'inspection',
   duration: '1–2 hrs',
-  basePrice: '₹4,500',
+  basePrice: '₹3,500',
   description: 'On-site assessment & diagnostic visit',
 };
 

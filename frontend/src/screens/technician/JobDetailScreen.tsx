@@ -33,6 +33,8 @@ import {
 } from '../../utils/schedule';
 import { paymentBadgeVariant, paymentLabel, formatINR } from '../../utils/payment';
 import { sumSparePartsTotal } from '../../utils/sparePartsCalc';
+import { PaymentBreakdownCard } from '../../components/common/PaymentBreakdownCard';
+import { ServiceImagesGallery } from '../../components/common/ServiceImagesGallery';
 
 const STATUS_OPTIONS = [
   { id: 'en_route', label: 'En Route' },
@@ -113,6 +115,7 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [rescheduleNote, setRescheduleNote] = useState('');
   const [dropConfirmOpen, setDropConfirmOpen] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [resultAlert, setResultAlert] = useState<{
     title: string;
     message: string;
@@ -223,6 +226,36 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const completeJob = () => setCompleteConfirmOpen(true);
+
+  const confirmCompleteJob = async () => {
+    setActing(true);
+    try {
+      await bookingService.updateStatus(jobId, 'completed', notes, {
+        technicianNotes: notes || undefined,
+        spareParts,
+      });
+      setCurrentStatus('completed');
+      setCompleteConfirmOpen(false);
+      setResultAlert({
+        title: 'Service completed',
+        message:
+          'Client and admin have been notified. The client can now rate this service.',
+        icon: 'checkmark-circle-outline',
+      });
+      await load({ silent: true });
+    } catch (e: any) {
+      setCompleteConfirmOpen(false);
+      setResultAlert({
+        title: 'Could not complete service',
+        message: e.message || 'Something went wrong. Please try again.',
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setActing(false);
+    }
+  };
+
   const updateStatus = async () => {
     setActing(true);
     try {
@@ -324,6 +357,8 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     isAssignedToMe &&
     !isMasterAssigned &&
     !['completed', 'cancelled'].includes(booking.status);
+  const canComplete =
+    isAssignedToMe && !['completed', 'cancelled'].includes(booking.status);
   const masterAssignerId =
     masterAssigner && typeof masterAssigner === 'object'
       ? masterAssigner._id != null
@@ -407,12 +442,19 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       </Card>
 
       <Text style={styles.blockLabel}>Payment</Text>
-      <Card padding={16}>
-        <DetailRow
-          label="Status"
-          value={paymentLabel(booking.paymentStatus ?? 'unpaid')}
+      {booking.invoice ? (
+        <PaymentBreakdownCard
+          invoice={booking.invoice}
+          sparePartsLines={spareParts}
         />
-      </Card>
+      ) : (
+        <Card padding={16}>
+          <DetailRow
+            label="Status"
+            value={paymentLabel(booking.paymentStatus ?? 'unpaid')}
+          />
+        </Card>
+      )}
 
       <Text style={styles.blockLabel}>Services requested</Text>
       <Card padding={16}>
@@ -434,6 +476,15 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             <Text style={styles.notesBody}>{clientNotes}</Text>
           </Card>
         </>
+      ) : null}
+
+      {booking.serviceImages && booking.serviceImages.length > 0 ? (
+        <Card padding={16}>
+          <ServiceImagesGallery
+            images={booking.serviceImages}
+            title="Client photos"
+          />
+        </Card>
       ) : null}
 
       {spareParts.length > 0 ? (
@@ -480,6 +531,14 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           onPress={dropJob}
           loading={acting}
           style={styles.dropBtn}
+        />
+      )}
+      {canComplete && (
+        <Button
+          label="SERVICE COMPLETED"
+          onPress={completeJob}
+          loading={acting}
+          style={canDrop ? styles.completeBtnAfterDrop : styles.completeBtn}
         />
       )}
     </View>
@@ -757,6 +816,14 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           style={styles.dropBtnGhost}
         />
       )}
+      {canComplete && (
+        <Button
+          label="SERVICE COMPLETED"
+          onPress={completeJob}
+          loading={acting}
+          style={styles.completeBtnAfterDrop}
+        />
+      )}
     </View>
   );
 
@@ -878,6 +945,20 @@ export const JobDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         onConfirm={confirmDropJob}
         onCancel={() => {
           if (!acting) setDropConfirmOpen(false);
+        }}
+      />
+
+      <ThemedConfirmModal
+        visible={completeConfirmOpen}
+        title="Mark service completed?"
+        message="The client and admin will be notified that this service is complete. The client will be asked to rate you."
+        confirmLabel="SERVICE COMPLETED"
+        cancelLabel="CANCEL"
+        loading={acting}
+        icon="checkmark-circle-outline"
+        onConfirm={confirmCompleteJob}
+        onCancel={() => {
+          if (!acting) setCompleteConfirmOpen(false);
         }}
       />
 
@@ -1143,7 +1224,9 @@ const styles = StyleSheet.create({
     color: COLORS.red,
   },
   saveBtn: { marginTop: 8, marginBottom: 8 },
-  dropBtn: { marginTop: 24, marginBottom: 24 },
+  dropBtn: { marginTop: 24, marginBottom: 12 },
+  completeBtn: { marginTop: 24, marginBottom: 24 },
+  completeBtnAfterDrop: { marginBottom: 24 },
   masterNotice: {
     marginTop: 16,
     marginBottom: 8,
@@ -1163,7 +1246,7 @@ const styles = StyleSheet.create({
     color: COLORS.grayLight,
     lineHeight: 20,
   },
-  dropBtnGhost: { marginBottom: 24 },
+  dropBtnGhost: { marginBottom: 12 },
   rescheduleHint: {
     fontFamily: 'Montserrat_400Regular',
     fontSize: 12,

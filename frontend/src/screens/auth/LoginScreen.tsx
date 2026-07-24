@@ -5,13 +5,13 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AtomikLogo } from '../../components/common/AtomikLogo';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { FadeIn } from '../../components/common/FadeIn';
+import { ThemedAlertModal } from '../../components/common/ThemedConfirmModal';
 import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
 import { useLayoutInsets } from '../../hooks/useLayoutInsets';
@@ -35,6 +35,11 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     identifier?: string;
     password?: string;
   }>({});
+  const [resultAlert, setResultAlert] = useState<{
+    title: string;
+    message: string;
+    icon?: keyof typeof Ionicons.glyphMap;
+  } | null>(null);
 
   const validate = () => {
     const newErrors: { identifier?: string; password?: string } = {};
@@ -60,13 +65,17 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         })
       );
     } catch (err: any) {
-      Alert.alert(
-        err?.status === 429 ? 'Too many attempts' : 'Login Failed',
-        formatRateLimitMessage(
+      const isRateLimited = err?.status === 429;
+      setResultAlert({
+        title: isRateLimited ? 'Too many attempts' : 'Login Failed',
+        message: formatRateLimitMessage(
           err,
-          'Too many authentication attempts. Please try again later.'
-        )
-      );
+          isRateLimited
+            ? 'Too many authentication attempts. Please try again later.'
+            : 'Invalid credentials. Please check your email/phone and password.'
+        ),
+        icon: isRateLimited ? 'time-outline' : 'alert-circle-outline',
+      });
     } finally {
       setLoading(false);
     }
@@ -148,6 +157,15 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
           </FadeIn>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ThemedAlertModal
+        visible={!!resultAlert}
+        title={resultAlert?.title ?? ''}
+        message={resultAlert?.message ?? ''}
+        icon={resultAlert?.icon}
+        buttonLabel="OKAY"
+        onClose={() => setResultAlert(null)}
+      />
     </Screen>
   );
 };

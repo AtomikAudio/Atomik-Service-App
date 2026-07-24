@@ -13,15 +13,64 @@ type InvoiceLike =
       totalAmount?: number;
       amountPaid?: number;
       balanceDue?: number;
+      amountReceived?: number;
       spareParts?: number;
       taxRate?: number;
       status?: string;
       paidAt?: string;
       serviceCharges?: number;
       technicianCharges?: number;
+      couponCode?: string;
+      discountPercent?: number;
+      discountAmount?: number;
+      paymentHistory?: { amount?: number }[];
     }
   | null
   | undefined;
+
+export function getInvoiceDiscountAmount(invoice: InvoiceLike): number {
+  if (!invoice) return 0;
+  return Math.max(0, Number(invoice.discountAmount) || 0);
+}
+
+/** Cash the client actually paid (after discount). */
+export function getInvoiceCashPaid(invoice: InvoiceLike): number {
+  if (!invoice) return 0;
+
+  const history = invoice.paymentHistory ?? [];
+  if (history.length > 0) {
+    return (
+      Math.round(
+        history.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) * 100
+      ) / 100
+    );
+  }
+
+  const discount = getInvoiceDiscountAmount(invoice);
+  const total = invoice.totalAmount ?? 0;
+  const paidMarker = invoice.amountPaid ?? 0;
+
+  if (discount > 0 && paidMarker >= total && total > 0) {
+    return Math.max(0, Math.round((total - discount) * 100) / 100);
+  }
+
+  if (typeof invoice.amountReceived === 'number' && invoice.amountReceived > 0) {
+    // Older booking APIs set amountReceived = quoted total on settle — ignore that.
+    const echoesQuote =
+      total > 0 &&
+      Math.abs(invoice.amountReceived - total) < 0.01 &&
+      paidMarker >= total;
+    if (!echoesQuote) {
+      return invoice.amountReceived;
+    }
+  }
+
+  if (discount > 0 && total > 0) {
+    return Math.max(0, Math.round((total - discount) * 100) / 100);
+  }
+
+  return paidMarker;
+}
 
 export function getInvoiceBalanceDue(invoice: InvoiceLike): number {
   if (!invoice) return 0;

@@ -1,6 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const BCRYPT_ROUNDS = 12;
+const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$/;
+
+export function isBcryptHash(value: string): boolean {
+  return BCRYPT_HASH_RE.test(value);
+}
+
 export interface IUser extends Document {
   name: string;
   email?: string;
@@ -94,9 +101,11 @@ userSchema.pre('save', async function (next) {
   }
 });
 
+/** Hash plaintext passwords with bcryptjs before save (skip if already a hash). */
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) return next();
-  this.password = await bcrypt.hash(this.password, 12);
+  if (isBcryptHash(this.password)) return next();
+  this.password = await bcrypt.hash(this.password, BCRYPT_ROUNDS);
   next();
 });
 
@@ -104,7 +113,21 @@ userSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {
   if (!this.password) return false;
-  return bcrypt.compare(candidatePassword, this.password);
+
+  if (isBcryptHash(this.password)) {
+    return bcrypt.compare(candidatePassword, this.password);
+  }
+
+  // Legacy plaintext row — accept once, then upgrade to bcrypt in place.
+  if (candidatePassword !== this.password) return false;
+
+  const hashed = await bcrypt.hash(candidatePassword, BCRYPT_ROUNDS);
+  await mongoose.connection.collection('users').updateOne(
+    { _id: this._id },
+    { $set: { password: hashed } }
+  );
+  this.password = hashed;
+  return true;
 };
 
 export const User = mongoose.model<IUser>('User', userSchema);

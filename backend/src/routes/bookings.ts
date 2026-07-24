@@ -13,6 +13,7 @@ import {
   dropJob,
   proposeReschedule,
   respondToReschedule,
+  uploadServiceImages,
 } from '../controllers/bookingController';
 import {
   createSlotHold,
@@ -21,6 +22,7 @@ import {
   getSlotsAvailability,
 } from '../controllers/slotHoldController';
 import { authenticate, authorize } from '../middleware/auth';
+import { bookingImagesUpload } from '../middleware/uploadBookingImages';
 import {
   assignTechnicianRules,
   cancelBookingRules,
@@ -59,6 +61,25 @@ router.post('/', authorize('client'), createBookingRules, validate, createBookin
 router.get('/my', getMyBookings);
 router.get('/', authorize('admin'), getAllBookings);
 router.get('/:id', ...mongoIdParamRules('id'), validate, getBookingById);
+router.post(
+  '/:id/images',
+  ...mongoIdParamRules('id'),
+  validate,
+  authorize('client'),
+  (req, res, next) => {
+    bookingImagesUpload(req, res, (err) => {
+      if (err) {
+        res.status(400).json({
+          success: false,
+          message: err instanceof Error ? err.message : 'Upload failed',
+        });
+        return;
+      }
+      next();
+    });
+  },
+  uploadServiceImages
+);
 router.patch(
   '/:id/accept',
   ...mongoIdParamRules('id'),

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
+import { NoRefundPolicyNote } from './NoRefundPolicyNote';
 
 interface Props {
   visible: boolean;
@@ -20,6 +21,8 @@ interface Props {
   confirmDestructive?: boolean;
   loading?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** Show no-refund policy strip (e.g. cancel paid booking). */
+  showNoRefundPolicy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -33,6 +36,7 @@ export const ThemedConfirmModal: React.FC<Props> = ({
   confirmDestructive = false,
   loading = false,
   icon = 'alert-circle-outline',
+  showNoRefundPolicy = false,
   onConfirm,
   onCancel,
 }) => {
@@ -79,6 +83,10 @@ export const ThemedConfirmModal: React.FC<Props> = ({
           >
             <Text style={styles.secondaryText}>{cancelLabel}</Text>
           </TouchableOpacity>
+
+          {showNoRefundPolicy ? (
+            <NoRefundPolicyNote style={styles.policyNote} />
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -211,5 +219,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.grayLight,
     letterSpacing: 1.2,
+  },
+  policyNote: {
+    marginTop: 16,
   },
 });
