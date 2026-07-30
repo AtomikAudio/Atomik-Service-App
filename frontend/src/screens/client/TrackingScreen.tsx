@@ -25,6 +25,7 @@ import { bookingHasSpareParts } from '../../utils/spareParts';
 import { invoiceNeedsPayment, isExtraPartsOnlyPayment } from '../../utils/invoice';
 import { resolveBillInvoice } from '../../utils/billInvoice';
 import { navigateToBookingPayment } from '../../utils/navigatePayment';
+import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import { RescheduleProposalCard } from '../../components/client/RescheduleProposalCard';
 import {
   hasRatedBooking,
@@ -51,6 +52,7 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const [rateOpen, setRateOpen] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
   const [canRate, setCanRate] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -122,6 +124,15 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
   const hasSpare = bookingHasSpareParts(booking);
   const extraPartsOnly = isExtraPartsOnlyPayment(invoice, booking.spareParts);
   const pay = () => navigateToBookingPayment(navigation, booking, invoice);
+  const downloadInvoice = async () => {
+    if (!invoice) return;
+    setDownloadingInvoice(true);
+    try {
+      await downloadInvoicePdf(booking, invoice);
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
   const serviceTypeLabel = formatServiceTypeLabel(booking.serviceType);
   const bookedServices = getBookedServiceSummary(booking);
   const clientNotes = parseBookingClientNotes(booking.notes);
@@ -260,6 +271,16 @@ export const TrackingScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Text style={styles.billMeta}>Extra parts settled</Text>
                 ) : null}
               </Card>
+            ) : null}
+
+            {invoice ? (
+              <Button
+                label="DOWNLOAD INVOICE"
+                variant="outline"
+                loading={downloadingInvoice}
+                onPress={downloadInvoice}
+                style={styles.downloadBtn}
+              />
             ) : null}
           </View>
         ) : null}
@@ -452,5 +473,8 @@ const styles = StyleSheet.create({
   },
   billPayBtn: {
     marginTop: 14,
+  },
+  downloadBtn: {
+    marginTop: 12,
   },
 });
