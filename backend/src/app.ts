@@ -21,6 +21,7 @@ import adminRoutes from './routes/admin';
 import notificationRoutes from './routes/notifications';
 import legalRoutes from './routes/legal';
 import reviewRoutes from './routes/reviews';
+import appRoutes from './routes/app';
 
 export function createApp(): express.Application {
   const app = express();
@@ -85,6 +86,7 @@ export function createApp(): express.Application {
   app.use('/api/admin', adminRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/reviews', reviewRoutes);
+  app.use('/api/app', appRoutes);
 
   app.use('*', (_req, res) => {
     res.status(404).json({ success: false, message: 'Route not found' });

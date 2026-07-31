@@ -5,9 +5,9 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
-  StatusBar,
   Image,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
@@ -82,7 +82,8 @@ export const SplashScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <Screen edges={['top', 'left', 'right']} style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {/* Android 15+: no backgroundColor — system bars are transparent under edge-to-edge */}
+      <StatusBar style="light" />
 
       <LinearGradient
         colors={['#000000', '#050404', '#0a0808', COLORS.background]}

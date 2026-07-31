@@ -48,23 +48,22 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
   const { addCategory, resetDraft } = useBookingDraft();
   const preselect = route?.params?.preselect;
   const [upcomingOpen, setUpcomingOpen] = useState(false);
-  const [latestUpcoming, setLatestUpcoming] = useState<Booking | null>(null);
+  const [upcomingServices, setUpcomingServices] = useState<Booking[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null
   );
 
-  const loadLatestUpcoming = useCallback(async (): Promise<Booking | null> => {
+  const loadUpcomingServices = useCallback(async (): Promise<Booking[]> => {
     try {
-      const bookings = await bookingService.getMyBookings({ limit: 20 });
+      const bookings = await bookingService.getMyBookings({ limit: 50 });
       const upcoming = bookings
         .filter(isActiveUpcoming)
         .sort((a, b) => bookingSortKey(a) - bookingSortKey(b));
-      const next = upcoming[0] ?? null;
-      setLatestUpcoming(next);
-      return next;
+      setUpcomingServices(upcoming);
+      return upcoming;
     } catch {
-      setLatestUpcoming(null);
-      return null;
+      setUpcomingServices([]);
+      return [];
     }
   }, []);
 
@@ -87,8 +86,8 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
   );
 
   const requestBook = useCallback(
-    (action: PendingAction, existing: Booking | null) => {
-      if (existing) {
+    (action: PendingAction, existingCount: number) => {
+      if (existingCount > 0) {
         setPendingAction(action);
         return;
       }
@@ -112,7 +111,7 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
       }
 
       void (async () => {
-        const existing = await loadLatestUpcoming();
+        const existing = await loadUpcomingServices();
         if (cancelled) return;
 
         if (
@@ -121,7 +120,7 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
         ) {
           requestBook(
             { kind: 'preselect', value: incomingPreselect },
-            existing
+            existing.length
           );
         }
       })();
@@ -130,7 +129,7 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
         cancelled = true;
       };
     }, [
-      loadLatestUpcoming,
+      loadUpcomingServices,
       navigation,
       requestBook,
       resetDraft,
@@ -140,19 +139,20 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
   );
 
   const onSelectGroup = (groupId: string, hasSubmenu: boolean) => {
-    requestBook({ kind: 'group', groupId, hasSubmenu }, latestUpcoming);
+    requestBook({ kind: 'group', groupId, hasSubmenu }, upcomingServices.length);
   };
 
-  const tech = latestUpcoming
-    ? getTechnicianFromBooking(latestUpcoming)
-    : null;
+  const nextUpcoming = upcomingServices[0] ?? null;
 
-  const confirmMessage = latestUpcoming
-    ? `Are you sure you want to book another service? You have already booked a service for ${formatBookingSchedule(
-        latestUpcoming.scheduledDate,
-        latestUpcoming.scheduledTime
-      )}.`
-    : 'Are you sure you want to book another service?';
+  const confirmMessage =
+    upcomingServices.length > 1
+      ? `Are you sure you want to book another service? You already have ${upcomingServices.length} upcoming services.`
+      : nextUpcoming
+        ? `Are you sure you want to book another service? You have already booked a service for ${formatBookingSchedule(
+            nextUpcoming.scheduledDate,
+            nextUpcoming.scheduledTime
+          )}.`
+        : 'Are you sure you want to book another service?';
 
   return (
     <View style={styles.container}>
@@ -207,7 +207,12 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
           onPress={() => setUpcomingOpen((o) => !o)}
           activeOpacity={0.85}
         >
-          <Text style={styles.sectionTitleInline}>Upcoming service</Text>
+          <Text style={styles.sectionTitleInline}>
+            Upcoming services
+            {upcomingServices.length > 0
+              ? ` (${upcomingServices.length})`
+              : ''}
+          </Text>
           <Ionicons
             name={upcomingOpen ? 'chevron-up' : 'chevron-down'}
             size={20}
@@ -216,32 +221,42 @@ export const ServiceCategoriesScreen: React.FC<Props> = ({
         </TouchableOpacity>
 
         {upcomingOpen ? (
-          latestUpcoming ? (
-            <TouchableOpacity
-              style={styles.upcomingCard}
-              onPress={() =>
-                navigation.navigate('TrackService', { id: latestUpcoming._id })
-              }
-              activeOpacity={0.88}
-            >
-              <Text style={styles.upcomingType}>
-                {formatServiceTypeLabel(latestUpcoming.serviceType)}
-              </Text>
-              <Text style={styles.upcomingMeta}>
-                {latestUpcoming.venueId?.name ?? 'Venue'}
-              </Text>
-              <Text style={styles.upcomingMeta}>
-                {formatBookingSchedule(
-                  latestUpcoming.scheduledDate,
-                  latestUpcoming.scheduledTime
-                )}
-              </Text>
-              {tech ? (
-                <Text style={styles.upcomingTech}>{tech.name}</Text>
-              ) : (
-                <Text style={styles.upcomingTechMuted}>Awaiting technician</Text>
-              )}
-            </TouchableOpacity>
+          upcomingServices.length > 0 ? (
+            <View style={styles.upcomingList}>
+              {upcomingServices.map((booking) => {
+                const tech = getTechnicianFromBooking(booking);
+                return (
+                  <TouchableOpacity
+                    key={booking._id}
+                    style={styles.upcomingCard}
+                    onPress={() =>
+                      navigation.navigate('TrackService', { id: booking._id })
+                    }
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.upcomingType}>
+                      {formatServiceTypeLabel(booking.serviceType)}
+                    </Text>
+                    <Text style={styles.upcomingMeta}>
+                      {booking.venueId?.name ?? 'Venue'}
+                    </Text>
+                    <Text style={styles.upcomingMeta}>
+                      {formatBookingSchedule(
+                        booking.scheduledDate,
+                        booking.scheduledTime
+                      )}
+                    </Text>
+                    {tech ? (
+                      <Text style={styles.upcomingTech}>{tech.name}</Text>
+                    ) : (
+                      <Text style={styles.upcomingTechMuted}>
+                        Awaiting technician
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           ) : (
             <View style={styles.upcomingEmpty}>
               <Text style={styles.upcomingEmptyText}>
@@ -341,6 +356,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 8,
     paddingVertical: 8,
+  },
+  upcomingList: {
+    gap: 12,
   },
   upcomingCard: {
     backgroundColor: COLORS.surface,

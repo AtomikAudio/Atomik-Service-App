@@ -12,8 +12,8 @@ import {
   Linking,
   Alert,
   Dimensions,
-  StatusBar,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 
@@ -89,7 +89,7 @@ export const ServiceImagesGallery: React.FC<Props> = ({
         animationType="fade"
         onRequestClose={close}
       >
-        <StatusBar barStyle="light-content" />
+        <StatusBar style="light" />
         <View style={styles.viewer}>
           <View style={styles.viewerTop}>
             <TouchableOpacity onPress={close} style={styles.viewerBtn} hitSlop={12}>

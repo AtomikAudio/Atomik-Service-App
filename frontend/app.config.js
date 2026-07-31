@@ -65,8 +65,8 @@ module.exports = {
   expo: {
     name: 'ATOMIK Audio',
     slug: 'atomik-audio',
-    version: '1.1.6',
-    orientation: 'portrait',
+    version: '1.1.7',
+    orientation: 'default',
     icon: './assets/icon.png',
     userInterfaceStyle: 'dark',
     scheme: 'atomikaudio',
@@ -97,7 +97,9 @@ module.exports = {
     },
     android: {
       package: 'com.atomikaudio.service',
-      versionCode: 1,
+      versionCode: 2,
+      // Android 15+ enforces edge-to-edge; keep explicit for older targets / Play guidance
+      edgeToEdgeEnabled: true,
       ...(androidGoogleServicesFile
         ? { googleServicesFile: androidGoogleServicesFile }
         : {}),
@@ -118,12 +120,26 @@ module.exports = {
         'android.permission.WRITE_EXTERNAL_STORAGE',
       ],
     },
+    androidStatusBar: {
+      // Icon/text style only — backgroundColor/translucent are deprecated under Android 15 edge-to-edge
+      barStyle: 'light-content',
+    },
+    androidNavigationBar: {
+      barStyle: 'light-content',
+    },
     web: {
       favicon: './assets/favicon.png',
     },
     plugins: [
       'expo-font',
       'expo-secure-store',
+      [
+        'expo-screen-orientation',
+        {
+          // Do not bake PORTRAIT into MainActivity — Play flags that for large screens
+          initialOrientation: 'DEFAULT',
+        },
+      ],
       [
         'expo-notifications',
         {

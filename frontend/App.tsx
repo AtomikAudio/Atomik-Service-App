@@ -21,7 +21,24 @@ import {
 import { store } from './src/store';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { AuthBootstrap } from './src/components/auth/AuthBootstrap';
+import { AppUpdateGate } from './src/components/common/AppUpdateGate';
 import { COLORS } from './src/constants/colors';
+import { usePhonePortraitLock } from './src/hooks/usePhonePortraitLock';
+
+function AppShell() {
+  usePhonePortraitLock();
+
+  return (
+    <>
+      {/* Android 15+ edge-to-edge: status bar is transparent; only style/hidden are supported */}
+      <StatusBar style="light" />
+      <AuthBootstrap>
+        <AppNavigator />
+      </AuthBootstrap>
+      <AppUpdateGate />
+    </>
+  );
+}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -53,10 +70,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <Provider store={store}>
-          <StatusBar style="light" backgroundColor={COLORS.background} />
-          <AuthBootstrap>
-            <AppNavigator />
-          </AuthBootstrap>
+          <AppShell />
         </Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

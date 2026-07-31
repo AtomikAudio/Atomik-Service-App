@@ -23,6 +23,10 @@ interface Props {
   icon?: keyof typeof Ionicons.glyphMap;
   /** Show no-refund policy strip (e.g. cancel paid booking). */
   showNoRefundPolicy?: boolean;
+  /** Hide secondary button (e.g. forced app update). */
+  hideCancel?: boolean;
+  /** When false, scrim / back cannot dismiss (forced flows). Default true. */
+  dismissible?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -37,19 +41,23 @@ export const ThemedConfirmModal: React.FC<Props> = ({
   loading = false,
   icon = 'alert-circle-outline',
   showNoRefundPolicy = false,
+  hideCancel = false,
+  dismissible = true,
   onConfirm,
   onCancel,
 }) => {
+  const canDismiss = dismissible && !loading;
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={loading ? undefined : onCancel}
+      onRequestClose={canDismiss ? onCancel : undefined}
     >
       <Pressable
         style={styles.overlay}
-        onPress={loading ? undefined : onCancel}
+        onPress={canDismiss ? onCancel : undefined}
       >
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
           <View style={styles.iconWrap}>
@@ -63,6 +71,7 @@ export const ThemedConfirmModal: React.FC<Props> = ({
               styles.primaryBtn,
               confirmDestructive && styles.destructiveBtn,
               loading && styles.btnDisabled,
+              hideCancel && styles.primaryBtnSolo,
             ]}
             onPress={onConfirm}
             disabled={loading}
@@ -75,14 +84,16 @@ export const ThemedConfirmModal: React.FC<Props> = ({
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={onCancel}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.secondaryText}>{cancelLabel}</Text>
-          </TouchableOpacity>
+          {!hideCancel ? (
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={onCancel}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryText}>{cancelLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {showNoRefundPolicy ? (
             <NoRefundPolicyNote style={styles.policyNote} />
@@ -192,6 +203,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
+  },
+  primaryBtnSolo: {
+    marginBottom: 0,
   },
   destructiveBtn: {
     backgroundColor: COLORS.redDark,
