@@ -88,13 +88,14 @@ If both `ANDROID_LATEST_VERSION` and `ANDROID_LATEST_VERSION_CODE` are empty, th
 
 ### Current baseline (this release)
 
-- App / Play target: `1.1.7` · `versionCode` `2`
-- Render should match after publish:
+- App marketing version: `1.1.7`
+- Android `versionCode`: managed by **EAS remote** (`eas.json` → `appVersionSource: remote`, `autoIncrement: true`). Next production build after code `26` is **`27`**.
+- Render must match after this build is on Play:
   - `ANDROID_LATEST_VERSION=1.1.7`
-  - `ANDROID_LATEST_VERSION_CODE=2`
+  - `ANDROID_LATEST_VERSION_CODE=27`
   - `ANDROID_FORCE_UPDATE=false`
 
-Users still on `1.1.6` / code `1` see the update popup once Render is set to the values above and the new build is on Play Store.
+Users still on older installs (e.g. `1.1.6` / code `≤26`) see the update popup once Render is set as above and the new build is live on Play Store.
 
 ---
 

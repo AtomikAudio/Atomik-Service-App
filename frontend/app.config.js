@@ -97,7 +97,9 @@ module.exports = {
     },
     android: {
       package: 'com.atomikaudio.service',
-      versionCode: 2,
+      // versionCode is owned by EAS remote (eas.json appVersionSource + autoIncrement).
+      // Local value is ignored at build time; keep for docs/reference only.
+      versionCode: 27,
       // Android 15+ enforces edge-to-edge; keep explicit for older targets / Play guidance
       edgeToEdgeEnabled: true,
       ...(androidGoogleServicesFile
