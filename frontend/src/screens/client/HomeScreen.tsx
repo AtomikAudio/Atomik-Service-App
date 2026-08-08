@@ -38,6 +38,7 @@ import { COLORS } from '../../constants/colors';
 import { Screen } from '../../components/common/Screen';
 import { SafeScrollView } from '../../components/common/SafeScrollView';
 import { RescheduleProposalCard } from '../../components/client/RescheduleProposalCard';
+import { useBookingDraft } from '../../context/BookingDraftContext';
 
 interface Props {
   navigation: any;
@@ -80,6 +81,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   // Fully dynamic Quick Actions grid: derive the column count and tile size from
   // the actual space available, so it fits any screen (Fold cover, phones,
   // tablets) without hardcoded breakpoints or clipping.
+  const { resetDraft } = useBookingDraft();
+
+  const openServicePackage = (kind: 'general-service' | 'general-visit') => {
+    resetDraft();
+    navigation.navigate('ServiceSubcategories', { kind });
+  };
+
   const quickGridWidth = width - 40; // scroll paddingHorizontal (20) * 2
   const quickColumnGap = 12;
   const quickMinCol = 76; // smallest comfortable width per action before wrapping
@@ -376,24 +384,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               label="General Service"
               width={quickItemWidth}
               tileSize={quickTileSize}
-              onPress={() =>
-                navigation.navigate('ServiceCategories', {
-                  reset: true,
-                  preselect: 'general-service',
-                })
-              }
+              onPress={() => openServicePackage('general-service')}
             />
             <QuickActionItem
               icon="navigate-outline"
               label="General Visit"
               width={quickItemWidth}
               tileSize={quickTileSize}
-              onPress={() =>
-                navigation.navigate('ServiceCategories', {
-                  reset: true,
-                  preselect: 'general-visit',
-                })
-              }
+              onPress={() => openServicePackage('general-visit')}
             />
             <QuickActionItem
               icon="card-outline"

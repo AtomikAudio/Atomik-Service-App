@@ -12,6 +12,7 @@
     "test": "jest",
     "seed": "ts-node src/scripts/seed.ts",
     "seed:staff": "ts-node src/scripts/seedStaff.ts",
+    "seed:demo-jobs": "ts-node src/scripts/seedDemoOpenJobs.ts",
     "free:slots": "ts-node src/scripts/freeSlots.ts",
     "clear:push-tokens": "ts-node src/scripts/clearPushTokens.ts",
     "clear-demo-data": "ts-node src/scripts/clearDemoData.ts",

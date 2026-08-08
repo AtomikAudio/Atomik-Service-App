@@ -48,6 +48,18 @@ export const STAFF: StaffAccount[] = [
     passwordEnv: 'STAFF_HASSAN_PASSWORD',
     role: 'technician',
   },
+  {
+    name: 'Lakshman',
+    phone: '9035895502',
+    passwordEnv: 'STAFF_LAKSHMAN_PASSWORD',
+    role: 'technician',
+  },
+  {
+    name: 'Shubham',
+    phone: '9793624702',
+    passwordEnv: 'STAFF_SHUBHAM_PASSWORD',
+    role: 'technician',
+  },
   // Master technician (only one allowed by the schema)
   {
     name: 'Sultan',

@@ -65,7 +65,7 @@ module.exports = {
   expo: {
     name: 'ATOMIK Audio',
     slug: 'atomik-audio',
-    version: '1.1.7',
+    version: '1.1.8',
     orientation: 'default',
     icon: './assets/icon.png',
     userInterfaceStyle: 'dark',
@@ -99,7 +99,7 @@ module.exports = {
       package: 'com.atomikaudio.service',
       // versionCode is owned by EAS remote (eas.json appVersionSource + autoIncrement).
       // Local value is ignored at build time; keep for docs/reference only.
-      versionCode: 27,
+      versionCode: 28,
       // Android 15+ enforces edge-to-edge; keep explicit for older targets / Play guidance
       edgeToEdgeEnabled: true,
       ...(androidGoogleServicesFile
